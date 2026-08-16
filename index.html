@@ -55,9 +55,9 @@ const MAP = [
   "#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~##",
   "#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~##",
   "#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~##",
-  "#~~~~~~~S~~~~~~1~~~~~~~~~~~~~~~~~~##",
-  "#~~~~~~~~~~~^~H~~~~~~~~~t~~R~~M~~~##",
-  "#~~~~~~~~~Z~~~~~~~~~~U~~~~~~~B~~~~##",
+  "#~~~~~~~S~~^~1~~~~~~~~~~~~~~~~~~~~##",
+  "#~~~~~~~~~~~~H~~~~~~~~~~t~~R~~M~~~##",
+  "#~~~~~~~~~~~~~~~~~~~Z~~U~~~~~B~~~~##",
   "#~~~~~~~~~~~~~~~~~~~~~T~~~~~~PQY.*##",
   "###########D########################",
   "#...........R.U.^..1..............##",
@@ -200,6 +200,7 @@ let optHits = [];
 let wantLock = false;
 let lockHintOnce = false;
 let lockAskedAt = 0;
+let padBoost = 0;
 let suppressShot = 0;
 let invulnT = 0;
 let lookSens = 1;
@@ -580,7 +581,7 @@ function footDest() {
   if (!ac) return null;
   if (footIn) return footIn;
   const g = ac.createGain();
-  g.gain.value = 2.8;
+  g.gain.value = 4.4;
   g.connect(ac.destination);
   footIn = g;
   return g;
@@ -723,10 +724,12 @@ const SFX = {
     playOsc(70, 0.3, "sawtooth", 0.16, 36);
   },
   pad() {
-    playOsc(84, 0.26, "sine", 0.38, 640);
-    playOsc(150, 0.18, "triangle", 0.24, 420);
-    playNoise(0.14, 0.32, 1200, "bandpass");
-    thump(62, 0.2, 0.5);
+    const d = gunDest();
+    playOsc(84, 0.32, "sine", 0.7, 720);
+    playOsc(150, 0.22, "triangle", 0.45, 480);
+    blast(0.2, 0.7, 1100, "bandpass", 1.0, d);
+    kick(48, 0.28, 1.1, d);
+    thump(62, 0.24, 0.7);
   },
   pain() {
     playOsc(150, 0.16, "sawtooth", 0.28, 48);
@@ -753,19 +756,15 @@ const SFX = {
   },
   step(kind, run) {
     const d = footDest();
-    const vol = run ? 1.25 : 1.05;
+    const vol = run ? 1.7 : 1.45;
+    kick(78, 0.12, vol * 0.95, d);
+    blast(0.11, vol * 0.85, 880, "bandpass", 1.15, d);
+    blast(0.12, vol * 0.7, 340, "lowpass", 0.7, d);
     if (kind === "metal") {
-      kick(155, 0.07, vol * 0.55, d);
-      blast(0.08, vol * 0.7, 2200, "bandpass", 1.4, d);
-      blast(0.11, vol * 0.45, 650, "lowpass", 0.8, d);
+      kick(155, 0.07, vol * 0.5, d);
+      blast(0.08, vol * 0.55, 2200, "bandpass", 1.4, d);
     } else if (kind === "dirt") {
-      kick(54, 0.14, vol * 0.9, d);
-      blast(0.14, vol * 0.7, 320, "lowpass", 0.7, d);
-      blast(0.07, vol * 0.28, 1000, "highpass", 0.7, d);
-    } else {
-      kick(72, 0.1, vol * 0.8, d);
-      blast(0.09, vol * 0.62, 920, "bandpass", 1.1, d);
-      blast(0.1, vol * 0.5, 380, "lowpass", 0.75, d);
+      blast(0.1, vol * 0.4, 240, "lowpass", 0.65, d);
     }
   },
   drip() {
@@ -810,7 +809,7 @@ function startAmbience() {
   try { if (ac.state === "suspended") ac.resume(); } catch (err) {}
   try {
     const master = ac.createGain();
-    master.gain.value = 1.05;
+    master.gain.value = 1.45;
     master.connect(ac.destination);
     amb.master = master;
 
@@ -829,14 +828,14 @@ function startAmbience() {
 
     const brown = loopNoiseBuf(5.2, "brown");
     const pink = loopNoiseBuf(4.4, "pink");
-    amb.windG = layer(brown, "lowpass", 240, 0.7, 0.2);
-    amb.airG = layer(pink, "bandpass", 1100, 0.75, 0.1);
-    amb.torchG = layer(pink, "bandpass", 1700, 1.35, 0.08);
-    amb.clothG = layer(pink, "bandpass", 480, 0.9, 0.05);
+    amb.windG = layer(brown, "lowpass", 220, 0.7, 0.42);
+    amb.airG = layer(pink, "bandpass", 980, 0.7, 0.22);
+    amb.torchG = layer(pink, "bandpass", 1600, 1.2, 0.12);
+    amb.clothG = layer(pink, "bandpass", 420, 0.85, 0.1);
     amb.rushG = layer(pink, "highpass", 900, 0.7, 0.001);
 
     const droneG = ac.createGain();
-    droneG.gain.value = 0.05;
+    droneG.gain.value = 0.1;
     droneG.connect(master);
     amb.droneG = droneG;
     const d1 = ac.createOscillator();
@@ -885,12 +884,12 @@ function updateAmbience(dt, moving, running, airborne) {
   if (!amb.master) return;
   const t = ac.currentTime;
   const yard = playerCell().r <= 7;
-  if (amb.windG) amb.windG.gain.setTargetAtTime(yard ? 0.34 : 0.08, t, 0.3);
-  if (amb.airG) amb.airG.gain.setTargetAtTime(yard ? 0.18 : 0.05, t, 0.3);
-  if (amb.torchG) amb.torchG.gain.setTargetAtTime((yard ? 0.1 : 0.16) * (0.7 + Math.random() * 0.5), t, 0.07);
-  if (amb.clothG) amb.clothG.gain.setTargetAtTime(airborne ? 0.06 : (moving ? (running ? 0.2 : 0.14) : 0.045), t, 0.1);
-  if (amb.rushG) amb.rushG.gain.setTargetAtTime(airborne ? 0.18 : 0.001, t, 0.08);
-  if (amb.droneG) amb.droneG.gain.setTargetAtTime(yard ? 0.04 : 0.06, t, 0.4);
+  if (amb.windG) amb.windG.gain.setTargetAtTime(yard ? 0.55 : 0.28, t, 0.3);
+  if (amb.airG) amb.airG.gain.setTargetAtTime(yard ? 0.32 : 0.2, t, 0.3);
+  if (amb.torchG) amb.torchG.gain.setTargetAtTime((yard ? 0.12 : 0.2) * (0.7 + Math.random() * 0.5), t, 0.07);
+  if (amb.clothG) amb.clothG.gain.setTargetAtTime(airborne ? 0.12 : (moving ? (running ? 0.28 : 0.2) : 0.08), t, 0.1);
+  if (amb.rushG) amb.rushG.gain.setTargetAtTime(airborne ? 0.32 : 0.001, t, 0.08);
+  if (amb.droneG) amb.droneG.gain.setTargetAtTime(yard ? 0.09 : 0.12, t, 0.4);
   amb.dripT -= dt;
   if (amb.dripT <= 0) {
     amb.dripT = yard ? 1.4 + Math.random() * 1.8 : 0.7 + Math.random() * 1.2;
@@ -1124,10 +1123,10 @@ function paintHUD(g) {
     g.fillStyle = "rgba(140,0,0," + Math.min(0.22, dmgT * 0.55) + ")";
     g.fillRect(0, 0, UW, UH);
   }
-  if (msgT > 0 && msg && msg !== "CLICK TO LOOK" && msg !== "LOOK FREE  CLICK TO LOCK") {
-    g.fillStyle = "rgba(0,0,0,0.45)";
-    g.fillRect(40, 28, 240, 16);
-    drawText(g, msg, 160, 31, "#f0c040", 1, "center");
+  if (msgT > 0 && msg && msg !== "CLICK TO LOOK" && msg !== "LOOK FREE  CLICK TO LOCK" && msg !== "CTRL ENTER FIRE") {
+    g.fillStyle = "rgba(0,0,0,0.55)";
+    g.fillRect(70, 156, 180, 11);
+    drawText(g, msg, 160, 157, "#f0c040", 1, "center");
   }
   paintHitCue(g);
   g.fillStyle = "#1a0c08";
@@ -1515,15 +1514,16 @@ function signpostPad(px, pz) {
   const ux = dx / len, uz = dz / len;
   const yaw = Math.atan2(ux, uz);
   const shape = new THREE.Shape();
-  shape.moveTo(0, 0.55);
-  shape.lineTo(-0.4, -0.28);
-  shape.lineTo(0.4, -0.28);
+  shape.moveTo(0, 0.85);
+  shape.lineTo(-0.62, -0.4);
+  shape.lineTo(0.62, -0.4);
   shape.closePath();
   const geo = new THREE.ShapeGeometry(shape);
-  for (let i = 1; i <= 3; i++) {
-    const t = 2.4 * i;
+  const stops = [0.22, 0.44, 0.66, 0.88];
+  for (let i = 0; i < stops.length; i++) {
+    const t = len * stops[i];
     const chev = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: 0xffd040, side: THREE.DoubleSide }));
-    chev.position.set(sx + ux * t, 0.12, sz + uz * t);
+    chev.position.set(sx + ux * t, 0.14, sz + uz * t);
     chev.rotation.x = -Math.PI / 2;
     chev.rotation.z = -yaw;
     scene.add(chev);
@@ -1536,42 +1536,50 @@ function placePad(x, y, z, yard, force) {
   if (dist < TILE * 1.05) return;
   if (!force && dist < TILE * 2.2) return;
   const group = new THREE.Group();
-  const rad = yard ? 1.48 : 1.12;
-  const base = new THREE.Mesh(new THREE.CylinderGeometry(rad, rad + 0.06, yard ? 0.22 : 0.16, 12), mat(metalTex, 0x665544));
+  const rad = yard ? 1.85 : 1.12;
+  const base = new THREE.Mesh(
+    new THREE.CylinderGeometry(rad, rad + 0.08, yard ? 0.28 : 0.16, 12),
+    yard ? new THREE.MeshBasicMaterial({ color: 0x6a4010 }) : mat(metalTex, 0x665544)
+  );
   const disk = new THREE.Mesh(
-    new THREE.CylinderGeometry(rad - 0.08, rad - 0.04, 0.12, 12),
+    new THREE.CylinderGeometry(rad - 0.1, rad - 0.06, yard ? 0.16 : 0.12, 12),
     yard
-      ? new THREE.MeshBasicMaterial({ map: padTex, color: 0xe09020 })
+      ? new THREE.MeshBasicMaterial({ map: padTex, color: 0xffc030 })
       : mat(padTex, 0xffffff, 0x221100)
   );
-  disk.position.y = yard ? 0.14 : 0.1;
+  disk.position.y = yard ? 0.16 : 0.1;
   const nub = new THREE.Mesh(
-    new THREE.CylinderGeometry(yard ? 0.32 : 0.22, yard ? 0.4 : 0.28, yard ? 0.16 : 0.08, 8),
-    new THREE.MeshLambertMaterial({ color: 0xf0b028, emissive: yard ? 0xaa5500 : 0x553300, flatShading: true })
+    new THREE.CylinderGeometry(yard ? 0.42 : 0.22, yard ? 0.52 : 0.28, yard ? 0.22 : 0.08, 8),
+    yard
+      ? new THREE.MeshBasicMaterial({ color: 0xffe060 })
+      : new THREE.MeshLambertMaterial({ color: 0xf0b028, emissive: 0x553300, flatShading: true })
   );
-  nub.position.y = yard ? 0.26 : 0.16;
+  nub.position.y = yard ? 0.32 : 0.16;
   group.add(base, disk, nub);
   let column = null;
   if (yard) {
     const ring = new THREE.Mesh(
-      new THREE.TorusGeometry(1.28, 0.09, 6, 16),
-      new THREE.MeshLambertMaterial({ color: 0xffd060, emissive: 0xcc6600, flatShading: true })
+      new THREE.TorusGeometry(1.55, 0.14, 6, 16),
+      new THREE.MeshBasicMaterial({ color: 0xffd040 })
     );
     ring.rotation.x = Math.PI / 2;
-    ring.position.y = 0.3;
+    ring.position.y = 0.34;
     group.add(ring);
     column = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.16, 0.3, 3.4, 6),
-      new THREE.MeshBasicMaterial({ color: 0xffc050, transparent: true, opacity: 0.55 })
+      new THREE.CylinderGeometry(0.28, 0.48, 2.6, 8),
+      new THREE.MeshBasicMaterial({ color: 0xffc040 })
     );
-    column.position.y = 1.9;
+    column.position.y = 1.5;
     group.add(column);
-    const light = new THREE.PointLight(0xffa030, 0.45, 10, 1.6);
-    light.position.y = 2.1;
+    const cap = new THREE.Mesh(
+      new THREE.SphereGeometry(0.28, 8, 8),
+      new THREE.MeshBasicMaterial({ color: 0xffee80 })
+    );
+    cap.position.y = 2.85;
+    group.add(cap);
+    const light = new THREE.PointLight(0xffb040, 1.1, 12, 1.4);
+    light.position.y = 2.2;
     group.add(light);
-    const tag = makeLabel("BOUNCE");
-    tag.position.set(0, 2.4, 0);
-    group.add(tag);
   }
   group.position.set(x, y, z);
   scene.add(group);
@@ -1632,15 +1640,16 @@ function spawnEnemy(x, y, z, tough) {
 function markOpener(e) {
   if (!e) return;
   e.opener = true;
-  e.body.material = new THREE.MeshLambertMaterial({ color: 0xd4b070, emissive: 0x6a4018, flatShading: true });
-  e.head.material = new THREE.MeshLambertMaterial({ color: 0xf0d0a0, emissive: 0x5a3010, flatShading: true });
+  e.hp = e.max = 36;
+  e.body.material = new THREE.MeshBasicMaterial({ color: 0xd8b060 });
+  e.head.material = new THREE.MeshBasicMaterial({ color: 0xf0d0a0 });
   const sash = new THREE.Mesh(
-    new THREE.BoxGeometry(0.56, 0.2, 0.36),
-    new THREE.MeshBasicMaterial({ color: 0xff3020 })
+    new THREE.BoxGeometry(0.62, 0.24, 0.4),
+    new THREE.MeshBasicMaterial({ color: 0xff2010 })
   );
   sash.position.y = 1.08;
   e.group.add(sash);
-  e.group.scale.set(1.18, 1.18, 1.18);
+  e.group.scale.set(1.42, 1.42, 1.42);
 }
 
 function spawnBarrel(x, z) {
@@ -1799,26 +1808,29 @@ function buildGun(id) {
     addPart(g, new THREE.BoxGeometry(0.065, 0.065, 0.22), metalMat(0xa8a888), 0.28, -0.16, -0.8);
     addPart(g, new THREE.BoxGeometry(0.03, 0.06, 0.08), metalMat(0xd0d0b0), 0.28, -0.08, -0.5);
   } else if (id === "bazooka") {
-    addPart(g, new THREE.CylinderGeometry(0.075, 0.085, 0.92, 8), metalMat(0xc4b878), 0.3, -0.16, -0.66, Math.PI / 2);
-    addPart(g, new THREE.CylinderGeometry(0.1, 0.1, 0.1, 8), metalMat(0x333328), 0.3, -0.16, -1.1, Math.PI / 2);
-    addPart(g, new THREE.CylinderGeometry(0.1, 0.07, 0.12, 8), metalMat(0xa8a880), 0.3, -0.16, -0.22, Math.PI / 2);
-    addPart(g, new THREE.BoxGeometry(0.1, 0.14, 0.2), metalMat(0x8a4a16), 0.3, -0.3, -0.4);
-    addPart(g, new THREE.BoxGeometry(0.04, 0.11, 0.06), metalMat(0xd0d0b0), 0.3, -0.06, -0.52);
-    addPart(g, new THREE.BoxGeometry(0.16, 0.04, 0.18), metalMat(0x6a5a30), 0.3, -0.06, -0.7);
+    addPart(g, new THREE.CylinderGeometry(0.1, 0.12, 0.95, 8), metalMat(0xc8a040), 0.16, -0.2, -0.58, Math.PI / 2);
+    addPart(g, new THREE.CylinderGeometry(0.14, 0.14, 0.12, 8), metalMat(0x3a3018), 0.16, -0.2, -1.02, Math.PI / 2);
+    addPart(g, new THREE.ConeGeometry(0.13, 0.2, 8), new THREE.MeshBasicMaterial({ color: 0xe8c050 }), 0.16, -0.2, -1.14, Math.PI / 2);
+    addPart(g, new THREE.CylinderGeometry(0.13, 0.1, 0.14, 8), metalMat(0x8a6a28), 0.16, -0.2, -0.14, Math.PI / 2);
+    addPart(g, new THREE.BoxGeometry(0.12, 0.16, 0.22), metalMat(0x8a4a16), 0.16, -0.34, -0.36);
+    addPart(g, new THREE.BoxGeometry(0.05, 0.12, 0.07), metalMat(0xd8d0a0), 0.16, -0.08, -0.46);
+    addPart(g, new THREE.BoxGeometry(0.22, 0.04, 0.16), metalMat(0x6a4a18), 0.16, -0.08, -0.62);
   } else if (id === "heat") {
-    addPart(g, new THREE.CylinderGeometry(0.07, 0.08, 0.78, 8), metalMat(0xb0b098), 0.28, -0.16, -0.62, Math.PI / 2);
-    addPart(g, new THREE.ConeGeometry(0.075, 0.16, 8), metalMat(0xe04018), 0.28, -0.16, -1.04, Math.PI / 2);
-    addPart(g, new THREE.BoxGeometry(0.14, 0.12, 0.24), metalMat(0xc8a040), 0.28, -0.2, -0.38);
-    addPart(g, new THREE.BoxGeometry(0.05, 0.05, 0.1), new THREE.MeshBasicMaterial({ color: 0xff5522 }), 0.28, -0.08, -0.5);
-    addPart(g, new THREE.BoxGeometry(0.09, 0.16, 0.1), metalMat(0x8a4a14), 0.28, -0.32, -0.34);
-    addPart(g, new THREE.CylinderGeometry(0.1, 0.1, 0.08, 8), metalMat(0x333328), 0.28, -0.16, -0.24, Math.PI / 2);
+    addPart(g, new THREE.CylinderGeometry(0.09, 0.1, 0.82, 8), metalMat(0xb8a070), 0.15, -0.2, -0.54, Math.PI / 2);
+    addPart(g, new THREE.ConeGeometry(0.11, 0.22, 8), new THREE.MeshBasicMaterial({ color: 0xff3310 }), 0.15, -0.2, -0.98, Math.PI / 2);
+    addPart(g, new THREE.BoxGeometry(0.16, 0.14, 0.26), metalMat(0xc85018), 0.15, -0.24, -0.32);
+    addPart(g, new THREE.BoxGeometry(0.06, 0.06, 0.12), new THREE.MeshBasicMaterial({ color: 0xff6622 }), 0.15, -0.1, -0.44);
+    addPart(g, new THREE.BoxGeometry(0.1, 0.16, 0.1), metalMat(0x8a4a14), 0.15, -0.36, -0.3);
+    addPart(g, new THREE.CylinderGeometry(0.12, 0.12, 0.1, 8), metalMat(0x333328), 0.15, -0.2, -0.16, Math.PI / 2);
   } else {
-    addPart(g, new THREE.CylinderGeometry(0.055, 0.065, 0.62, 8), metalMat(0xd0b050), 0.2, -0.16, -0.62, Math.PI / 2);
-    addPart(g, new THREE.CylinderGeometry(0.055, 0.065, 0.62, 8), metalMat(0xd0b050), 0.36, -0.16, -0.62, Math.PI / 2);
-    addPart(g, new THREE.BoxGeometry(0.26, 0.14, 0.28), metalMat(0xc88828), 0.28, -0.2, -0.34);
-    addPart(g, new THREE.BoxGeometry(0.06, 0.05, 0.16), metalMat(0x772200), 0.2, -0.08, -0.48);
-    addPart(g, new THREE.BoxGeometry(0.06, 0.05, 0.16), metalMat(0x772200), 0.36, -0.08, -0.48);
-    addPart(g, new THREE.BoxGeometry(0.09, 0.16, 0.1), metalMat(0x8a4a14), 0.28, -0.32, -0.3);
+    addPart(g, new THREE.CylinderGeometry(0.07, 0.08, 0.7, 8), metalMat(0xe0b040), 0.08, -0.2, -0.54, Math.PI / 2);
+    addPart(g, new THREE.CylinderGeometry(0.07, 0.08, 0.7, 8), metalMat(0xe0b040), 0.24, -0.2, -0.54, Math.PI / 2);
+    addPart(g, new THREE.ConeGeometry(0.08, 0.16, 7), new THREE.MeshBasicMaterial({ color: 0xffaa33 }), 0.08, -0.2, -0.92, Math.PI / 2);
+    addPart(g, new THREE.ConeGeometry(0.08, 0.16, 7), new THREE.MeshBasicMaterial({ color: 0xffaa33 }), 0.24, -0.2, -0.92, Math.PI / 2);
+    addPart(g, new THREE.BoxGeometry(0.3, 0.15, 0.3), metalMat(0xc88828), 0.16, -0.24, -0.28);
+    addPart(g, new THREE.BoxGeometry(0.07, 0.05, 0.16), metalMat(0x882200), 0.08, -0.1, -0.42);
+    addPart(g, new THREE.BoxGeometry(0.07, 0.05, 0.16), metalMat(0x882200), 0.24, -0.1, -0.42);
+    addPart(g, new THREE.BoxGeometry(0.1, 0.16, 0.1), metalMat(0x8a4a14), 0.16, -0.36, -0.26);
   }
   return g;
 }
@@ -2106,7 +2118,8 @@ function hurtEnemy(e, dmg, part, hit) {
   e.hurt = 0.28;
   e.flinch = 0.22;
   hitMarkT = 0.22;
-  e.head.material.emissive = new THREE.Color(part === "head" ? 0xcc2000 : 0x881000);
+  if (e.head.material.emissive) e.head.material.emissive = new THREE.Color(part === "head" ? 0xcc2000 : 0x881000);
+  else e.head.material.color.setHex(part === "head" ? 0xff4020 : 0xcc3010);
   spawnGibs(e.x, 1.1, e.z, part === "head" ? 18 : 10);
   blast(0.05, 0.55, 1800, "highpass", 0.8);
   kick(90, 0.08, 0.45);
@@ -2122,13 +2135,13 @@ function killEnemy(e, gibby) {
   e.dead = true;
   e.state = "dead";
   SFX.death();
-  spawnGibs(e.x, 1.2, e.z, gibby ? 36 : 24);
+  spawnGibs(e.x, 1.2, e.z, e.opener || gibby ? 42 : 24);
   addDecal(e.x, e.y + 0.02, e.z);
   const wall = nearestWallHit(e.x, 1.1, e.z);
   if (wall) addDecal(e.x, 1.1, e.z, wall);
   e.group.visible = false;
   if (performance.now() / 1000 > tauntT) {
-    showMsg(TAUNTS[(Math.random() * TAUNTS.length) | 0], 1100);
+    showMsg(TAUNTS[(Math.random() * TAUNTS.length) | 0], 800);
     tauntT = performance.now() / 1000 + 2.4;
   }
 }
@@ -2230,7 +2243,7 @@ function takePickup(p) {
   p.taken = true;
   p.mesh.visible = false;
   SFX.pickup();
-  showMsg(p.label);
+  showMsg(p.label, 700);
   if (p.kind === "gold") keys.gold = true;
   if (p.kind === "silver") keys.silver = true;
   if (p.kind === "mp40") { have[1] = true; reserve[1] += 64; mag[1] = 32; wepI = 1; swapGun(); }
@@ -2257,7 +2270,7 @@ function resetPlayer() {
   player = {
     x: px, y: 0, z: pz,
     yaw: -Math.PI / 2,
-    pitch: 0.12,
+    pitch: 0.2,
     vx: 0, vy: 0, vz: 0,
     onGround: true, hp: 100, armor: 0,
     _k: held
@@ -2272,6 +2285,7 @@ function resetPlayer() {
   gunKick = 0;
   gunRecoil = 0;
   timeAlive = 0;
+  padBoost = 0;
   invulnT = 3.2;
   hitCueT = 0;
   hitMarkT = 0;
@@ -2350,7 +2364,10 @@ function updateEnemy(e, dt) {
   if (e.dead) return;
   if (e.hurt > 0) {
     e.hurt -= dt;
-    if (e.hurt <= 0) e.head.material.emissive.setHex(0x000000);
+    if (e.hurt <= 0) {
+      if (e.head.material.emissive) e.head.material.emissive.setHex(0x000000);
+      else if (e.opener) e.head.material.color.setHex(0xf0d0a0);
+    }
   }
   if (e.flinch > 0) e.flinch -= dt;
   const dx = player.x - e.x, dz = player.z - e.z;
@@ -2587,14 +2604,14 @@ function buildLevel() {
   }
   const s = findCell("S");
   if (!pads.some((p) => p.yard)) {
-    placePad(worldX(s.c + 4), 0, worldZ(s.r + 1), true, true);
+    placePad(worldX(s.c + 3), 0, worldZ(s.r), true, true);
   }
   if (!enemies.some((en) => en.opener && !en.dead)) {
-    spawnEnemy(worldX(s.c + 7), 0, worldZ(s.r), false);
+    spawnEnemy(worldX(s.c + 5), 0, worldZ(s.r), false);
     markOpener(enemies[enemies.length - 1]);
   }
   if (!pickups.some((p) => p.kind === "health" && p.yard)) {
-    makeMonkMeal(worldX(s.c + 6), 0.6, worldZ(s.r + 1), true);
+    makeMonkMeal(worldX(s.c + 5), 0.6, worldZ(s.r + 1), true);
   }
   const yardPad = pads.find((p) => p.yard);
   if (yardPad) signpostPad(yardPad.x, yardPad.z);
@@ -2680,7 +2697,8 @@ function startGame() {
   for (const e of enemies) {
     e.dead = false; e.hp = e.max; e.group.visible = true; e.state = "idle";
     e.nextShot = 2.8 + Math.random();
-    e.head.material.emissive.setHex(0x000000);
+    if (e.head.material.emissive) e.head.material.emissive.setHex(0x000000);
+    else if (e.opener) e.head.material.color.setHex(0xf0d0a0);
   }
   for (const p of pickups) { p.taken = false; p.mesh.visible = true; }
   for (const d of doors) {
@@ -2709,7 +2727,7 @@ function startGame() {
   const bootSound = () => {
     if (!started) return;
     startAmbience();
-    SFX.step("dirt", true);
+    SFX.step("stone", true);
   };
   if (ac && ac.state !== "running" && ac.resume) {
     ac.resume().then(bootSound).catch(bootSound);
@@ -2717,7 +2735,6 @@ function startGame() {
     bootSound();
   }
   lockPointer();
-  showMsg("CTRL ENTER FIRE", 2200);
 }
 
 function clickOptions(p) {
@@ -2907,9 +2924,15 @@ function tick(dt) {
   const sp = running ? RUN : MOVE;
   const len = Math.hypot(ix, iz) || 1;
   const cy = Math.cos(player.yaw), sy = Math.sin(player.yaw);
-  const wishX = (ix / len) * cy + (iz / len) * sy;
-  const wishZ = (iz / len) * cy - (ix / len) * sy;
-  const moving = ix || iz;
+  let wishX = (ix / len) * cy + (iz / len) * sy;
+  let wishZ = (iz / len) * cy - (ix / len) * sy;
+  if (padBoost > 0) {
+    padBoost -= dt;
+    const lx = -Math.sin(player.yaw), lz = -Math.cos(player.yaw);
+    wishX += lx * 0.85;
+    wishZ += lz * 0.85;
+  }
+  const moving = ix || iz || padBoost > 0;
   const airborne = !player.onGround;
   updateAmbience(dt, !!moving, running, airborne);
   if (moving) {
@@ -2921,11 +2944,16 @@ function tick(dt) {
         SFX.air();
       }
     } else {
-      const period = running ? 0.26 : 0.4;
-      stepT += dt;
-      if (stepT >= period) {
-        stepT -= period;
+      const period = running ? 0.26 : 0.36;
+      if (stepT > 10) {
         SFX.step(floorKind(), running);
+        stepT = 0;
+      } else {
+        stepT += dt;
+        if (stepT >= period) {
+          stepT -= period;
+          SFX.step(floorKind(), running);
+        }
       }
     }
   } else {
@@ -2946,23 +2974,23 @@ function tick(dt) {
   for (const p of pads) {
     p.cool = Math.max(0, p.cool - dt);
     p.flash = Math.max(0, p.flash - dt * 3);
-    p.nub.material.emissive.setHex(p.flash > 0 ? 0xee8800 : (p.yard ? 0xcc6600 : 0x553300));
-    const bobY = Math.sin(titleT * 8 + p.x) * (p.yard ? 0.12 : 0.02);
-    p.disk.position.y = (p.yard ? 0.14 : 0.1) + bobY + (p.flash > 0 ? 0.08 : 0);
-    if (p.yard) p.group.position.y = p.y + bobY * 0.45;
-    if (p.column && p.column.material) {
-      p.column.material.opacity = 0.38 + Math.sin(titleT * 6 + p.x) * 0.22;
-      p.column.scale.y = 1 + Math.sin(titleT * 5 + p.z) * 0.08;
+    if (p.nub.material.emissive) {
+      p.nub.material.emissive.setHex(p.flash > 0 ? 0xee8800 : (p.yard ? 0xcc6600 : 0x553300));
+    } else {
+      p.nub.material.color.setHex(p.flash > 0 ? 0xffee88 : 0xffe060);
     }
+    const bobY = Math.sin(titleT * 8 + p.x) * (p.yard ? 0.08 : 0.02);
+    p.disk.position.y = (p.yard ? 0.16 : 0.1) + bobY + (p.flash > 0 ? 0.08 : 0);
+    if (p.column) p.column.scale.y = 1 + Math.sin(titleT * 5 + p.z) * 0.06;
     if (p.cool > 0) continue;
-    if (Math.hypot(player.x - p.x, player.z - p.z) < (p.yard ? 1.62 : 1.18) && player.y < p.y + 1.25 && player.y > p.y - 0.4) {
+    if (Math.hypot(player.x - p.x, player.z - p.z) < (p.yard ? 2.45 : 1.18) && player.y < p.y + 2.2 && player.y > p.y - 0.5) {
       player.vy = PAD_UP;
       player.onGround = false;
-      if (moving) {
-        player.x += wishX * 0.22;
-        player.z += wishZ * 0.22;
-      }
-      p.cool = 0.4;
+      padBoost = 0.5;
+      const lx = -Math.sin(player.yaw), lz = -Math.cos(player.yaw);
+      player.x += lx * 0.6;
+      player.z += lz * 0.6;
+      p.cool = 0.45;
       p.flash = 1;
       SFX.pad();
     }
