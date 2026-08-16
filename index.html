@@ -58,12 +58,12 @@ const MAP = [
   "#~~~~~~~S~^~~1~~~~~~~~~~~~~~~~~~~~##",
   "#~~~~~~~~~~~~H~~~~~~~~~~t~~R~~M~~~##",
   "#~~~~~~~~~~~~~~~~~~~Z~~U~~~~~B~~~~##",
-  "#~~~~~~~~~~G~~~~~~~~~~~~~~~~~~~~~~##",
-  "###########g########################",
-  "###########...######################",
-  "###########.1.######################",
-  "###########.1.######################",
-  "###########D########################",
+  "#~~~~~~~G~~~~~~~~~~~~~~~~~~~~~~~~~##",
+  "########g###########################",
+  "#######...##########################",
+  "#######.1.##########################",
+  "#######.1.##########################",
+  "########D###########################",
   "#...............1.................##",
   "#..^........................^....c##",
   "#......1...........1.............c##",
@@ -161,6 +161,7 @@ let airT = 0;
 let footIn = null;
 const keys = { gold: false, silver: false };
 let haveGold = false;
+let goldDoorOpen = false;
 let player;
 let gunRoot, muzzle, gunFlash, gunLight;
 let pointerLocked = false;
@@ -2369,6 +2370,9 @@ function use() {
       SFX.door();
       showMsg(d.kind === "free" ? "DOOR" : d.kind.toUpperCase() + " DOOR");
       if (d.kind === "gold" && player && player.z < d.z + 0.9) {
+        goldDoorOpen = true;
+        lookFreeze = 0;
+        invulnT = 0;
         player.x = d.x;
         player.z = d.z + 2.15;
         player.y = 0;
@@ -2379,6 +2383,13 @@ function use() {
         player.yaw = Math.PI;
         player.pitch = 0.08;
         applyLook();
+        for (const e of enemies) {
+          if (e.dead || e.opener || inCourtyard(e.x, e.z)) continue;
+          if (Math.hypot(e.x - player.x, e.z - player.z) < 14) {
+            e.state = "shoot";
+            e.nextShot = 0.16;
+          }
+        }
       }
       return;
     }
@@ -2443,6 +2454,7 @@ function resetPlayer() {
   keys.gold = false;
   keys.silver = false;
   haveGold = false;
+  goldDoorOpen = false;
   wepI = 0;
   mag = [24, 32, 6, 5, 4];
   reserve = [96, 64, 8, 6, 5];
@@ -2561,7 +2573,7 @@ function padWorld(p) {
 
 function padHitR(p) {
   const meshR = p.rad || (p.yard ? 2.2 : 1.12);
-  return meshR + PLAYER_R + (p.yard ? 0.65 : 0.2);
+  return meshR + PLAYER_R + (p.yard ? 0.28 : 0.2);
 }
 
 function feetOnPad(p) {
@@ -2571,11 +2583,8 @@ function feetOnPad(p) {
   p.z = w.z;
   const hitR = padHitR(p);
   if (player.y > w.y + 3.4 || player.y < w.y - 0.85) return false;
-  if (Math.hypot(player.x - w.x, player.z - w.z) < hitR) return true;
-  if (!p.yard) return false;
-  const along = (player.x - w.x) * openFwdX + (player.z - w.z) * openFwdZ;
-  const across = (player.x - w.x) * -openFwdZ + (player.z - w.z) * openFwdX;
-  return Math.abs(along) < hitR && Math.abs(across) < hitR;
+  if (p.yard && player.z > w.z + 1.55) return false;
+  return Math.hypot(player.x - w.x, player.z - w.z) < hitR;
 }
 
 function rideLaunchLook() {
@@ -2821,9 +2830,12 @@ function updateEnemy(e, dt) {
   if (e.flinch > 0) e.flinch -= dt;
   const dx = player.x - e.x, dz = player.z - e.z;
   const dist = Math.hypot(dx, dz) || 0.001;
-  if (invulnT > 0 || timeAlive < 3.2) return;
-  if (nearSpawn(player.x, player.z)) return;
-  if (inCourtyard(player.x, player.z) && !e.opener) return;
+  const yard = inCourtyard(player.x, player.z);
+  if (yard) {
+    if (invulnT > 0 || timeAlive < 3.2) return;
+    if (nearSpawn(player.x, player.z)) return;
+    if (!e.opener) return;
+  }
   if (inCourtyard(e.x, e.z) && !e.opener) return;
   const los = dist < 28 && hasLOS(e);
   if (los) e.state = dist < 11 ? "shoot" : "chase";
@@ -2869,6 +2881,7 @@ function buildLevel() {
   const mMetal = mat(metalTex, 0x889090);
   const mBanner = mat(bannerTex);
   const mCeil = new THREE.MeshLambertMaterial({ color: 0x1a120c, flatShading: true });
+  const mHallCeil = new THREE.MeshLambertMaterial({ color: 0x8a6820, emissive: 0x3a2808, flatShading: true });
   const mGold = new THREE.MeshLambertMaterial({ color: 0xe0b020, emissive: 0x442200, flatShading: true });
   const mSilver = new THREE.MeshLambertMaterial({ color: 0xb8c0c8, emissive: 0x111122, flatShading: true });
   const mFire = new THREE.MeshLambertMaterial({ color: 0xff6622, emissive: 0xaa2200, flatShading: true });
@@ -2912,20 +2925,20 @@ function buildLevel() {
   fountLit.position.set(fx, 2.2, fz);
   scene.add(fountLit);
   const doorFill = new THREE.PointLight(0xffb060, 0.45, 12, 1.5);
-  doorFill.position.set(worldX(11), 3.8, worldZ(7));
+  doorFill.position.set(worldX(8), 3.8, worldZ(7));
   scene.add(doorFill);
   const hallFill = new THREE.PointLight(0xffb060, 0.85, 10, 1.3);
-  hallFill.position.set(worldX(11), 3.2, worldZ(9));
+  hallFill.position.set(worldX(8), 3.2, worldZ(9));
   scene.add(hallFill);
   const hallFill2 = new THREE.PointLight(0xff8040, 0.7, 9, 1.4);
-  hallFill2.position.set(worldX(11), 3.0, worldZ(11));
+  hallFill2.position.set(worldX(8), 3.0, worldZ(11));
   scene.add(hallFill2);
   for (const r of [9, 10, 11]) {
     const bowl = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.22, 1.8, 6), new THREE.MeshLambertMaterial({ color: 0x6a3a18, emissive: 0x331104, flatShading: true }));
-    bowl.position.set(worldX(10) + 0.7, 1.0, worldZ(r));
+    bowl.position.set(worldX(7) + 0.7, 1.0, worldZ(r));
     scene.add(bowl);
     const flame = new THREE.Mesh(new THREE.SphereGeometry(0.18, 6, 6), new THREE.MeshBasicMaterial({ color: 0xff8844 }));
-    flame.position.set(worldX(10) + 0.7, 2.05, worldZ(r));
+    flame.position.set(worldX(7) + 0.7, 2.05, worldZ(r));
     scene.add(flame);
   }
   for (const [c, r] of [[4, 2], [8, 1], [20, 1], [26, 2], [30, 3], [32, 6]]) {
@@ -2953,7 +2966,7 @@ function buildLevel() {
       fl.position.set(x, y0 - 0.11, z);
       scene.add(fl);
       if (!outdoor && ch !== "^") {
-        const ceil = new THREE.Mesh(new THREE.BoxGeometry(TILE, 0.16, TILE), mCeil);
+        const ceil = new THREE.Mesh(new THREE.BoxGeometry(TILE, 0.16, TILE), r >= 8 && r <= 12 ? mHallCeil : mCeil);
         ceil.position.set(x, WALL_H + 0.18, z);
         scene.add(ceil);
       }
@@ -3275,7 +3288,7 @@ function bind() {
     if (pointerLocked) {
       wantLock = false;
       clearLockHint();
-      if (started) lookFreeze = Math.max(lookFreeze, 0.35);
+      if (started && !goldDoorOpen && playerRow() <= 7) lookFreeze = Math.max(lookFreeze, 0.35);
     }
     if (!pointerLocked && ignoreUnlock) ignoreUnlock = false;
   };
@@ -3384,6 +3397,7 @@ function tick(dt) {
     return;
   }
   timeAlive += dt;
+  if (goldDoorOpen || playerRow() > 7) lookFreeze = 0;
   if (lookFreeze > 0) {
     lookFreeze -= dt;
     player.yaw = openYaw;
