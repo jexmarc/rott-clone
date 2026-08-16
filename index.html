@@ -53,9 +53,9 @@ const MAP = [
   "#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~##",
   "#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~##",
   "#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~##",
-  "#~~~~~~~S~~~~~~~~~~~~~~~~~~~~~~~~~##",
-  "#~~~~~~~~~~~~~~H~~~1~~~~t~~R~~M~~~##",
-  "#~~~~~~~~~Z~~~^~~~~~~U~~~~~~~B~~~~##",
+  "#~~~~~~~S~~~~~~1~~~~~~~~~~~~~~~~~~##",
+  "#~~~~~~~~~~~^~1~H~~~~~~~t~~R~~M~~~##",
+  "#~~~~~~~~~Z~~~~~~~~~~U~~~~~~~B~~~~##",
   "#~~~~~~~~~~~~~~~~~~~~~T~~~~~~PQY.*##",
   "###########D########################",
   "#...........R.U.^..1..............##",
@@ -271,9 +271,12 @@ function codeIs(action, code) {
 }
 
 function isFireEvent(e) {
+  if (!e) return false;
   const key = (e.key || "").toLowerCase();
+  const code = e.code || "";
   if (key === "control" || key === "enter") return true;
-  return codeIs("fire", e.code);
+  if (code.indexOf("Control") === 0 || code === "Enter" || code === "NumpadEnter") return true;
+  return codeIs("fire", code);
 }
 
 function fireHeld() {
@@ -491,8 +494,12 @@ function boxAt(x, y, z, w, h, d, material, solid) {
 function initAudio() {
   try {
     if (!ac) ac = new (window.AudioContext || window.webkitAudioContext)();
-    if (ac && ac.state === "suspended") ac.resume();
+    if (ac && ac.state !== "running") {
+      const p = ac.resume();
+      if (p && p.catch) p.catch(() => {});
+    }
   } catch (err) {}
+  return ac;
 }
 
 function setupTitleMusic() {
@@ -551,7 +558,7 @@ function gunDest() {
   shaper.curve = curve;
   shaper.oversample = "2x";
   const make = ac.createGain();
-  make.gain.value = 2.35;
+  make.gain.value = 3.1;
   comp.connect(shaper);
   shaper.connect(make);
   make.connect(ac.destination);
@@ -568,14 +575,14 @@ function footDest() {
   if (!ac) return null;
   if (footIn) return footIn;
   const g = ac.createGain();
-  g.gain.value = 2.25;
+  g.gain.value = 2.8;
   g.connect(ac.destination);
   footIn = g;
   return g;
 }
 
 function blast(dur, vol, freq, type, Q, dest) {
-  if (!ac) initAudio();
+  initAudio();
   if (!ac) return;
   const s = ac.createBufferSource();
   s.buffer = bangBuf(dur);
@@ -589,7 +596,7 @@ function blast(dur, vol, freq, type, Q, dest) {
 }
 
 function kick(freq, dur, vol, dest) {
-  if (!ac) initAudio();
+  initAudio();
   if (!ac) return;
   const t = ac.currentTime;
   const o = ac.createOscillator();
@@ -648,13 +655,14 @@ function crack(vol) {
 
 const SFX = {
   shoot() {
+    initAudio();
     const d = gunDest();
-    blast(0.016, 1.75, 2600, "highpass", 0.7, d);
-    blast(0.07, 1.6, 1350, "bandpass", 1.05, d);
-    blast(0.22, 1.5, 460, "lowpass", 0.62, d);
-    blast(0.4, 0.72, 150, "lowpass", 0.5, d);
-    kick(50, 0.3, 1.6, d);
-    kick(24, 0.46, 1.1, d);
+    blast(0.018, 2.1, 2600, "highpass", 0.7, d);
+    blast(0.08, 1.9, 1350, "bandpass", 1.05, d);
+    blast(0.24, 1.75, 460, "lowpass", 0.62, d);
+    blast(0.42, 0.9, 150, "lowpass", 0.5, d);
+    kick(50, 0.32, 1.9, d);
+    kick(24, 0.48, 1.3, d);
   },
   mp40() {
     const d = gunDest();
@@ -797,7 +805,7 @@ function startAmbience() {
   try { if (ac.state === "suspended") ac.resume(); } catch (err) {}
   try {
     const master = ac.createGain();
-    master.gain.value = 0.92;
+    master.gain.value = 1.05;
     master.connect(ac.destination);
     amb.master = master;
 
@@ -1511,11 +1519,12 @@ function placePad(x, y, z, yard) {
 
 function nearSpawn(x, z) {
   const s = findCell("S");
-  return Math.hypot(x - worldX(s.c), z - worldZ(s.r)) < TILE * 8;
+  return Math.hypot(x - worldX(s.c), z - worldZ(s.r)) < TILE * 4.5;
 }
 
 function spawnEnemy(x, y, z, tough) {
-  if (nearSpawn(x, z)) return;
+  const s = findCell("S");
+  if (Math.hypot(x - worldX(s.c), z - worldZ(s.r)) < TILE * 3.2) return;
   const g = new THREE.Group();
   const cloth = tough ? 0x2a2a28 : 0xb88850;
   const pants = tough ? 0x1a1a18 : 0x6a4a28;
@@ -1695,8 +1704,8 @@ function buildPistol(name, x, y, z, yaw) {
 function buildGun(id) {
   const g = new THREE.Group();
   if (id === "pistol") {
-    g.add(buildPistol("rightPistol", 0.3, -0.16, -0.48, 0));
-    g.add(buildPistol("leftPistol", -0.3, -0.14, -0.44, 0.1));
+    g.add(buildPistol("rightPistol", 0.15, -0.2, -0.5, 0));
+    g.add(buildPistol("leftPistol", -0.13, -0.19, -0.48, 0.08));
   } else if (id === "mp40") {
     addPart(g, new THREE.BoxGeometry(0.11, 0.12, 0.46), metalMat(0xb8b898), 0.28, -0.18, -0.58);
     addPart(g, new THREE.BoxGeometry(0.1, 0.09, 0.22), metalMat(0x8a4a18), 0.28, -0.26, -0.36);
@@ -1732,7 +1741,7 @@ function buildGun(id) {
 
 function setupGun() {
   gunRoot = new THREE.Group();
-  gunRoot.scale.set(1.42, 1.42, 1.42);
+  gunRoot.scale.set(0.7, 0.7, 0.7);
   camera.add(gunRoot);
   muzzle = new THREE.PointLight(0xffaa55, 0, 7);
   muzzle.position.set(0.24, -0.16, -0.92);
@@ -2236,8 +2245,9 @@ function updateEnemy(e, dt) {
   const dx = player.x - e.x, dz = player.z - e.z;
   const dist = Math.hypot(dx, dz) || 0.001;
   if (invulnT > 0 || timeAlive < 3.2) return;
+  if (nearSpawn(player.x, player.z)) return;
   if (timeAlive < 20 && !e.opener) return;
-  const los = dist < 22 && hasLOS(e);
+  const los = dist < 36 && hasLOS(e);
   if (los) e.state = dist < 11 ? "shoot" : "chase";
   else if (e.state === "shoot" || e.state === "chase") e.state = "idle";
   const sp = (e.tough ? 4.4 : 3.6) * dt;
@@ -2488,11 +2498,19 @@ function lockPointer() {
 function setKey(e, down) {
   if (!e) return;
   if (e.code) keysDown[e.code] = down;
-  const key = e.key || "";
-  if (key === "ArrowUp" || e.code === "ArrowUp") keysDown.ArrowUp = down;
-  if (key === "ArrowDown" || e.code === "ArrowDown") keysDown.ArrowDown = down;
-  if (key === "ArrowLeft" || e.code === "ArrowLeft") keysDown.ArrowLeft = down;
-  if (key === "ArrowRight" || e.code === "ArrowRight") keysDown.ArrowRight = down;
+  const key = (e.key || "").toLowerCase();
+  if (e.key === "ArrowUp" || e.code === "ArrowUp") keysDown.ArrowUp = down;
+  if (e.key === "ArrowDown" || e.code === "ArrowDown") keysDown.ArrowDown = down;
+  if (e.key === "ArrowLeft" || e.code === "ArrowLeft") keysDown.ArrowLeft = down;
+  if (e.key === "ArrowRight" || e.code === "ArrowRight") keysDown.ArrowRight = down;
+  if (key === "control" || (e.code && e.code.indexOf("Control") === 0)) {
+    keysDown.ControlLeft = down;
+    keysDown.ControlRight = down;
+  }
+  if (key === "enter" || e.code === "Enter" || e.code === "NumpadEnter") {
+    keysDown.Enter = down;
+    keysDown.NumpadEnter = down;
+  }
 }
 
 function startGame() {
@@ -2536,8 +2554,16 @@ function startGame() {
     renderer.domElement.tabIndex = 0;
     renderer.domElement.focus();
   }
-  startAmbience();
-  SFX.step("dirt", false);
+  const bootSound = () => {
+    if (!started) return;
+    startAmbience();
+    SFX.step("dirt", true);
+  };
+  if (ac && ac.state !== "running" && ac.resume) {
+    ac.resume().then(bootSound).catch(bootSound);
+  } else {
+    bootSound();
+  }
   lockPointer();
   showMsg("THE HUNT BEGINS", 1500);
 }
@@ -2565,6 +2591,7 @@ function clickOptions(p) {
 function bind() {
   if (player) player._k = keysDown;
   const onStartClick = (e) => {
+    initAudio();
     if (e && e.button != null && e.button !== 0) return;
     if (optionsOpen) return;
     if (!started && screen === "title") {
@@ -2611,7 +2638,8 @@ function bind() {
     releaseUiFocus();
   });
   window.addEventListener("pointerup", () => { slideDrag = false; }, true);
-  window.addEventListener("keydown", (e) => {
+  const onKeyDown = (e) => {
+    initAudio();
     if (optionsOpen) {
       e.preventDefault();
       if (e.code === "Escape") {
@@ -2652,12 +2680,14 @@ function bind() {
     if (codeIs("wep4", e.code) && have[3]) { wepI = 3; swapGun(); }
     if (codeIs("wep5", e.code) && have[4]) { wepI = 4; swapGun(); }
     if (/^(Space|Arrow|KeyW|KeyA|KeyS|KeyD|Shift|Control|Enter)/.test(e.code) || e.key === " ") e.preventDefault();
-  }, true);
+  };
+  window.addEventListener("keydown", onKeyDown, true);
   window.addEventListener("keyup", (e) => {
     if (optionsOpen) return;
     setKey(e, false);
   }, true);
   window.addEventListener("mousedown", (e) => {
+    initAudio();
     if (!started || optionsOpen) return;
     if (e.button !== 0 && e.button !== 2) return;
     if (!isLocked()) lockPointer();
@@ -2808,7 +2838,8 @@ function tick(dt) {
     reloading -= dt;
     if (reloading <= 0) finishReload();
   }
-  if (fireHeld() && currentWep().auto) fire();
+  if (ac && ac.state !== "running") initAudio();
+  if (fireHeld()) fire();
 
   for (const e of enemies) updateEnemy(e, dt);
   updateRockets(dt);
