@@ -52,9 +52,9 @@ const MAP = [
   "####################################",
   "#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~##",
   "#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~##",
-  "#~~~~S~~~~~~~~~~~~~~~~~~~~~~~~~~~~##",
   "#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~##",
-  "#~~~~~~~~~~~~~~1~~~~~~~~t~~R~~M~~~##",
+  "#~~~~~~~S~~~~~~~~~~~~~~~~~~~~~~~~~##",
+  "#~~~~~~~~~~~~~~~1~~~~~~~t~~R~~M~~~##",
   "#~~~~~~~~~Z~~~~~~~~~~U~~~~~~~B~~~~##",
   "#~~~~~~~~~~~~~~~~~~~~~T~~~~~~PQY.*##",
   "###########D########################",
@@ -423,13 +423,13 @@ function makeTextures() {
   });
   skyTex = texNoise(64, (x, y) => {
     const t = y / 64;
-    const n = (hash(x >> 1, y >> 1) * 20) | 0;
-    const cloud = hash(x >> 2, (y >> 2) + 3) > 0.64 ? 36 : 0;
-    const hz = Math.exp(-Math.pow((t - 0.58) * 4.4, 2));
+    const n = (hash(x >> 1, y >> 1) * 18) | 0;
+    const cloud = hash(x >> 2, (y >> 2) + 3) > 0.64 ? 28 : 0;
+    const hz = Math.exp(-Math.pow((t - 0.62) * 3.6, 2));
     return [
-      92 + t * 90 + hz * 80 + n + cloud,
-      52 + t * 42 + hz * 40 + cloud,
-      48 + t * 22 + hz * 10
+      210 + t * 40 + hz * 45 + n + cloud,
+      140 + t * 28 + hz * 30 + cloud,
+      78 + t * 18 + hz * 8
     ];
   });
 }
@@ -2021,7 +2021,7 @@ function resetPlayer() {
   player = {
     x: px, y: 0, z: pz,
     yaw: -Math.PI / 2,
-    pitch: 0.14,
+    pitch: 0.12,
     vx: 0, vy: 0, vz: 0,
     onGround: true, hp: 100, armor: 0,
     _k: held
@@ -2107,42 +2107,62 @@ function updateEnemy(e, dt) {
 }
 
 function buildLevel() {
-  const mStone = new THREE.MeshLambertMaterial({ map: stoneTex, color: 0xffe0b0, emissive: 0x6a2810, flatShading: true });
-  const mBlock = mat(blockTex, 0xf0d0a0, 0x2a1a08);
-  const mDark = mat(darkTex, 0x887058);
-  const mFloor = mat(floorTex, 0xe0c090, 0x2a1c10);
-  const mDirt = new THREE.MeshLambertMaterial({ map: dirtTex, color: 0xfff0c8, emissive: 0xb07028, flatShading: true });
+  const mStone = new THREE.MeshLambertMaterial({ map: stoneTex, color: 0xffe8c0, emissive: 0x8a4020, flatShading: true });
+  const mBlock = mat(blockTex, 0xffe0b0, 0x4a2810);
+  const mDark = mat(darkTex, 0xa88868);
+  const mFloor = mat(floorTex, 0xf0d0a0, 0x4a3018);
+  const mDirt = new THREE.MeshLambertMaterial({ map: dirtTex, color: 0xfff6d0, emissive: 0xd09038, flatShading: true });
   const mMetal = mat(metalTex, 0x889090);
   const mBanner = mat(bannerTex);
   const mCeil = new THREE.MeshLambertMaterial({ color: 0x1a120c, flatShading: true });
   const mGold = new THREE.MeshLambertMaterial({ color: 0xe0b020, emissive: 0x442200, flatShading: true });
   const mSilver = new THREE.MeshLambertMaterial({ color: 0xb8c0c8, emissive: 0x111122, flatShading: true });
   const mFire = new THREE.MeshLambertMaterial({ color: 0xff6622, emissive: 0xaa2200, flatShading: true });
-  const mTree = new THREE.MeshLambertMaterial({ color: 0x5a7a30, emissive: 0x1a2808, flatShading: true });
+  const mTree = new THREE.MeshLambertMaterial({ color: 0x7aaa38, emissive: 0x3a5810, flatShading: true });
   const mExit = new THREE.MeshLambertMaterial({ color: 0x28d050, emissive: 0x0a4018, flatShading: true });
 
-  scene.background = new THREE.Color(0xd87838);
-  scene.fog = new THREE.Fog(0xd87838, 110, 220);
-  scene.add(new THREE.AmbientLight(0xffe2a8, 1.55));
-  scene.add(new THREE.HemisphereLight(0xfff0c0, 0xa05020, 1.15));
-  const sun = new THREE.DirectionalLight(0xffe8c0, 1.85);
-  sun.position.set(-36, 54, 8);
+  scene.background = new THREE.Color(0xf2a24a);
+  scene.fog = new THREE.Fog(0xf2a24a, 170, 320);
+  scene.add(new THREE.AmbientLight(0xffe8b8, 2.25));
+  scene.add(new THREE.HemisphereLight(0xfff4d0, 0xc86828, 1.65));
+  const sun = new THREE.DirectionalLight(0xfff0d0, 2.7);
+  sun.position.set(48, 72, 12);
   scene.add(sun);
-  const fill = new THREE.DirectionalLight(0xffd8a8, 0.75);
-  fill.position.set(28, 36, -18);
+  const fill = new THREE.DirectionalLight(0xffe0b0, 1.15);
+  fill.position.set(-24, 40, -16);
   scene.add(fill);
   const sky = new THREE.Mesh(
-    new THREE.SphereGeometry(170, 20, 12),
+    new THREE.SphereGeometry(220, 20, 12),
     new THREE.MeshBasicMaterial({ map: skyTex, side: THREE.BackSide, fog: false })
   );
-  sky.position.y = 8;
+  sky.position.y = 12;
   scene.add(sky);
   const yard = findCell("S");
-  const spawnFill = new THREE.PointLight(0xffe2b0, 3.2, 46, 1.05);
-  spawnFill.position.set(worldX(yard.c + 4), 6.2, worldZ(yard.r));
+  const spawnFill = new THREE.PointLight(0xfff0c8, 5.2, 64, 1);
+  spawnFill.position.set(worldX(yard.c + 6), 7.4, worldZ(yard.r + 1));
   scene.add(spawnFill);
-  for (const [c, r] of [[6, 1], [16, 1], [26, 1], [10, 5], [20, 4], [30, 2]]) {
-    const torch = new THREE.PointLight(0xffb060, 3.6, 34, 1.1);
+  const fx = worldX(yard.c + 5), fz = worldZ(yard.r);
+  const basin = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.32, 0.36, 10), new THREE.MeshLambertMaterial({ color: 0xe8d8a0, emissive: 0x7a5820, flatShading: true }));
+  basin.position.set(fx, 0.18, fz);
+  scene.add(basin);
+  const water = new THREE.Mesh(new THREE.CylinderGeometry(0.88, 0.88, 0.12, 10), new THREE.MeshLambertMaterial({ color: 0x50b0d0, emissive: 0x206878, flatShading: true }));
+  water.position.set(fx, 0.4, fz);
+  scene.add(water);
+  const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.22, 1.15, 8), new THREE.MeshLambertMaterial({ color: 0xd4c078, emissive: 0x5a4010, flatShading: true }));
+  stem.position.set(fx, 0.98, fz);
+  scene.add(stem);
+  const top = new THREE.Mesh(new THREE.CylinderGeometry(0.58, 0.36, 0.24, 8), new THREE.MeshLambertMaterial({ color: 0x78d0e0, emissive: 0x287080, flatShading: true }));
+  top.position.set(fx, 1.6, fz);
+  scene.add(top);
+  const fountLit = new THREE.PointLight(0xd0f0ff, 2.8, 18, 1.15);
+  fountLit.position.set(fx, 2.2, fz);
+  scene.add(fountLit);
+  addSolid(fx, 0, fz, 1.6, 1.2, 1.6, basin);
+  const doorFill = new THREE.PointLight(0xffc878, 4.2, 40, 1.05);
+  doorFill.position.set(worldX(11), 3.8, worldZ(7));
+  scene.add(doorFill);
+  for (const [c, r] of [[8, 1], [14, 2], [20, 1], [26, 2], [12, 5], [18, 4], [24, 6], [30, 3]]) {
+    const torch = new THREE.PointLight(0xffc070, 4.4, 38, 1.05);
     torch.position.set(worldX(c), 3.4, worldZ(r));
     scene.add(torch);
     const bowl = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.28, 2.4, 6), new THREE.MeshLambertMaterial({ color: 0x6a3a18, emissive: 0x552208, flatShading: true }));
@@ -2189,7 +2209,7 @@ function buildLevel() {
       const x = worldX(c), z = worldZ(r);
       if (ch === "t") {
         boxAt(x, 0, z, 0.85, 5.1, 0.85, mTree, true);
-        const leaf = boxAt(x, 4.1, z, 2.3, 1.5, 2.3, new THREE.MeshLambertMaterial({ color: 0x4a6a28, emissive: 0x142010, flatShading: true }), false);
+        const leaf = boxAt(x, 4.1, z, 2.3, 1.5, 2.3, new THREE.MeshLambertMaterial({ color: 0x6a9a30, emissive: 0x2a4810, flatShading: true }), false);
         leaf.rotation.y = 0.4;
       }
       if (ch === "F") {
@@ -2314,7 +2334,7 @@ function startGame() {
   if (camera && player) {
     camera.position.set(player.x, player.y + PLAYER_H, player.z);
     camera.rotation.order = "YXZ";
-    camera.rotation.y = player.yaw;
+    camera.rotation.y = -player.yaw;
     camera.rotation.x = player.pitch;
   }
   for (const e of enemies) {
@@ -2646,7 +2666,7 @@ function tick(dt) {
   }
   camera.position.set(player.x, player.y + PLAYER_H + Math.sin(bob) * 0.22 - landDip * 0.28, player.z);
   camera.rotation.order = "YXZ";
-  camera.rotation.y = player.yaw + viewPunch * (pistolHand ? -0.09 : 0.09);
+  camera.rotation.y = -player.yaw + viewPunch * (pistolHand ? -0.09 : 0.09);
   camera.rotation.x = player.pitch + gunKick + viewPunch * 0.35 + Math.sin(bob * 2) * (moving ? 0.035 : 0);
   camera.rotation.z = (moving ? -ix * 0.07 : camera.rotation.z * 0.8) + viewPunch * 0.14;
   if (gunRoot) {
@@ -2706,7 +2726,7 @@ function main() {
   renderer.domElement.style.imageRendering = "pixelated";
   document.body.insertBefore(renderer.domElement, ui);
   scene = new THREE.Scene();
-  camera = new THREE.PerspectiveCamera(FOV, VW / VH, 0.08, 240);
+  camera = new THREE.PerspectiveCamera(FOV, VW / VH, 0.08, 340);
   camera.rotation.order = "YXZ";
   scene.add(camera);
   clock = new THREE.Clock();
@@ -2725,8 +2745,8 @@ function main() {
       "void main(){",
       "  vec4 c = texture2D(tDiffuse, vUv);",
       "  float bayer = fract(sin(dot(gl_FragCoord.xy, vec2(12.9898,78.233))) * 43758.5453);",
-      "  c.rgb = c.rgb * 1.5 + vec3(0.06, 0.03, 0.012);",
-      "  c.rgb = floor(c.rgb * 26.0 + bayer * 0.3) / 26.0;",
+      "  c.rgb = c.rgb * 1.85 + vec3(0.12, 0.06, 0.02);",
+      "  c.rgb = floor(c.rgb * 28.0 + bayer * 0.25) / 28.0;",
       "  float scan = 0.97 + 0.03 * step(0.5, fract(gl_FragCoord.y * 0.5));",
       "  c.rgb *= scan;",
       "  gl_FragColor = c;",
