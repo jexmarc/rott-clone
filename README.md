@@ -17,10 +17,10 @@ Or open `index.html` directly. A local server is safer for the audio file.
 
 ## Controls
 
-- Click to play / pointer lock (one click)
-- WASD move, Shift run, Space jump, mouse look
+- Click to play (one click). Pointer lock and mouse look start on that click.
+- WASD move, Shift run, Space jump, mouse look. These work even if lock is refused.
 - Left click fire, R reload, 1-5 weapons, E use / pushwall
-- M mutes the title track
+- M mutes the title track. There is no MUTE button.
 - Escape unlocks the mouse
 
 ## Level flow (shareware E1A1 shape)

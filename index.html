@@ -14,17 +14,18 @@
   #ui {
     position: fixed; inset: 0; width: 100%; height: 100%;
     image-rendering: pixelated; image-rendering: crisp-edges;
-    pointer-events: auto; z-index: 5;
+    pointer-events: none;
+    z-index: 5;
   }
-  #ui.play { pointer-events: none; }
+  #view { pointer-events: auto; }
 </style>
 </head>
 <body>
 <audio id="titleTrack" loop preload="auto">
   <source src="ROTT-Bounce.mp3" type="audio/mpeg">
 </audio>
-<canvas id="ui" width="320" height="200"></canvas>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/0.160.0/three.min.js"></script>
+<canvas id="ui" width="320" height="200" tabindex="-1"></canvas>
+<script src="three.min.js"></script>
 <script>
 /* Shareware E1A1 tribute. Original / synthesized assets only. Marc's ROTT-Bounce.mp3 stays on the title. */
 (() => {
@@ -1618,8 +1619,49 @@ function buildLevel() {
   }
 }
 
+function lockEl() {
+  return (renderer && renderer.domElement) || document.body;
+}
+
+function isLocked() {
+  const el = document.pointerLockElement || document.mozPointerLockElement;
+  return !!el;
+}
+
+function lockPointer() {
+  const el = lockEl();
+  const req = el.requestPointerLock || el.mozRequestPointerLock;
+  if (!req) return;
+  try {
+    const p = req.call(el);
+    if (p && p.catch) p.catch(() => {});
+  } catch (err) {}
+}
+
+function setKey(e, down) {
+  held[e.code] = down;
+  const k = (e.key || "").toLowerCase();
+  if (k === "w") held.KeyW = down;
+  if (k === "a") held.KeyA = down;
+  if (k === "s") held.KeyS = down;
+  if (k === "d") held.KeyD = down;
+  if (k === "e") held.KeyE = down;
+  if (k === "r") held.KeyR = down;
+  if (k === "m") held.KeyM = down;
+  if (k === " ") held.Space = down;
+  if (k === "shift") { held.ShiftLeft = down; held.ShiftRight = down; }
+  if (k === "1") held.Digit1 = down;
+  if (k === "2") held.Digit2 = down;
+  if (k === "3") held.Digit3 = down;
+  if (k === "4") held.Digit4 = down;
+  if (k === "5") held.Digit5 = down;
+}
+
 function startGame() {
+  if (started) return;
+  if (!scene || !player) return;
   initAudio();
+  if (!musicMuted && window.playTitleMusic) window.playTitleMusic();
   if (window.pauseTitleMusic) window.pauseTitleMusic();
   resetPlayer();
   for (const e of enemies) {
@@ -1645,60 +1687,61 @@ function startGame() {
   rockets.length = 0;
   started = true;
   screen = "play";
-  ui.classList.add("play");
-  document.body.requestPointerLock();
+  ui.style.pointerEvents = "none";
+  ui.removeAttribute("tabindex");
+  if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+  lockPointer();
   showMsg("THE HUNT BEGINS", 1500);
 }
 
 function bind() {
-  ui.addEventListener("click", (e) => {
-    if (started) return;
-    const rect = ui.getBoundingClientRect();
-    const x = ((e.clientX - rect.left) / rect.width) * UW;
-    const y = ((e.clientY - rect.top) / rect.height) * UH;
-    if (screen === "title" && y > 182 && y < 196 && x > 110 && x < 210) {
-      musicMuted = !musicMuted;
-      if (musicMuted) window.pauseTitleMusic();
-      else window.playTitleMusic();
+  const onStartClick = (e) => {
+    if (e && e.button != null && e.button !== 0) return;
+    if (!started) {
+      startGame();
       return;
     }
-    if (screen === "title" || screen === "dead" || screen === "win" || screen === "secret") startGame();
-  });
-  document.addEventListener("pointerlockchange", () => {
-    pointerLocked = document.pointerLockElement === document.body;
-  });
-  document.addEventListener("mousemove", (e) => {
-    if (!pointerLocked || !started) return;
+    if (!isLocked()) lockPointer();
+  };
+  window.addEventListener("pointerdown", onStartClick, true);
+  window.addEventListener("click", onStartClick, true);
+  document.addEventListener("pointerlockchange", () => { pointerLocked = isLocked(); });
+  document.addEventListener("mozpointerlockchange", () => { pointerLocked = isLocked(); });
+  window.addEventListener("mousemove", (e) => {
+    if (!started || !player) return;
+    if (!isLocked() && !pointerLocked) return;
     player.yaw -= e.movementX * 0.00215;
     player.pitch -= e.movementY * 0.00215;
     player.pitch = Math.max(-1.2, Math.min(1.2, player.pitch));
-  });
-  document.addEventListener("keydown", (e) => {
-    held[e.code] = true;
+  }, true);
+  window.addEventListener("keydown", (e) => {
+    setKey(e, true);
     if (e.code === "KeyM" && !started) {
       musicMuted = !musicMuted;
       if (musicMuted) window.pauseTitleMusic();
       else window.playTitleMusic();
     }
     if (!started) return;
-    if (e.code === "KeyE") use();
-    if (e.code === "KeyR") startReload();
-    if (e.code === "Digit1" && have[0]) { wepI = 0; swapGun(); }
-    if (e.code === "Digit2" && have[1]) { wepI = 1; swapGun(); }
-    if (e.code === "Digit3" && have[2]) { wepI = 2; swapGun(); }
-    if (e.code === "Digit4" && have[3]) { wepI = 3; swapGun(); }
-    if (e.code === "Digit5" && have[4]) { wepI = 4; swapGun(); }
+    if (e.code === "KeyE" || e.key === "e" || e.key === "E") use();
+    if (e.code === "KeyR" || e.key === "r" || e.key === "R") startReload();
+    if ((e.code === "Digit1" || e.key === "1") && have[0]) { wepI = 0; swapGun(); }
+    if ((e.code === "Digit2" || e.key === "2") && have[1]) { wepI = 1; swapGun(); }
+    if ((e.code === "Digit3" || e.key === "3") && have[2]) { wepI = 2; swapGun(); }
+    if ((e.code === "Digit4" || e.key === "4") && have[3]) { wepI = 3; swapGun(); }
+    if ((e.code === "Digit5" || e.key === "5") && have[4]) { wepI = 4; swapGun(); }
     if (e.code === "Escape") document.exitPointerLock();
-  });
-  document.addEventListener("keyup", (e) => { held[e.code] = false; });
-  document.addEventListener("mousedown", () => {
+    if (/^(Space|Arrow|KeyW|KeyA|KeyS|KeyD|Shift)/.test(e.code) || e.key === " ") e.preventDefault();
+  }, true);
+  window.addEventListener("keyup", (e) => { setKey(e, false); }, true);
+  window.addEventListener("mousedown", (e) => {
     if (!started) return;
-    if (!pointerLocked) { document.body.requestPointerLock(); return; }
+    if (e.button !== 0) return;
+    if (!isLocked()) { lockPointer(); }
     mouseDown = true;
     fire();
-  });
-  document.addEventListener("mouseup", () => { mouseDown = false; });
-  document.addEventListener("wheel", (e) => {
+  }, true);
+  window.addEventListener("mouseup", () => { mouseDown = false; }, true);
+  window.addEventListener("wheel", (e) => {
     if (!started) return;
     const dir = e.deltaY > 0 ? 1 : -1;
     for (let i = 0; i < 5; i++) {
@@ -1706,7 +1749,8 @@ function bind() {
       if (have[wepI]) break;
     }
     swapGun();
-  }, { passive: true });
+  }, { passive: true, capture: true });
+  window.addEventListener("blur", () => { held = {}; mouseDown = false; });
 }
 
 function tick(dt) {
@@ -1874,16 +1918,20 @@ function drawUI() {
 
 function loop() {
   requestAnimationFrame(loop);
-  const dt = Math.min(0.033, clock.getDelta());
-  tick(dt);
-  if (started) {
-    renderer.setRenderTarget(rt);
-    renderer.render(scene, camera);
-    renderer.setRenderTarget(null);
-    quadMat.uniforms.tDiffuse.value = rt.texture;
-    renderer.render(quadScene, quadCam);
+  try {
+    const dt = Math.min(0.033, clock.getDelta());
+    tick(dt);
+    if (started && renderer) {
+      renderer.setRenderTarget(rt);
+      renderer.render(scene, camera);
+      renderer.setRenderTarget(null);
+      quadMat.uniforms.tDiffuse.value = rt.texture;
+      renderer.render(quadScene, quadCam);
+    }
+    drawUI();
+  } catch (err) {
+    if (window.console) console.error(err);
   }
-  drawUI();
 }
 
 function main() {
@@ -1894,6 +1942,7 @@ function main() {
   renderer.outputColorSpace = THREE.LinearSRGBColorSpace;
   renderer.toneMapping = THREE.NoToneMapping;
   renderer.domElement.id = "view";
+  renderer.domElement.tabIndex = -1;
   renderer.domElement.style.imageRendering = "pixelated";
   document.body.insertBefore(renderer.domElement, ui);
   scene = new THREE.Scene();
@@ -1938,10 +1987,18 @@ function main() {
 
 window.addEventListener("load", () => {
   if (typeof THREE === "undefined") {
-    document.body.innerHTML = "<p style='color:#fff;padding:40px;font-family:monospace'>Could not load three.js.</p>";
+    ug.fillStyle = "#000";
+    ug.fillRect(0, 0, UW, UH);
+    drawText(ug, "COULD NOT LOAD THREE.JS", 160, 90, "#e02020", 1, "center");
     return;
   }
-  main();
+  try { main(); }
+  catch (err) {
+    if (window.console) console.error(err);
+    ug.fillStyle = "#000";
+    ug.fillRect(0, 0, UW, UH);
+    drawText(ug, "BOOT FAILED", 160, 90, "#e02020", 1, "center");
+  }
 });
 })();
 </script>
