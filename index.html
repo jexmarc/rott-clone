@@ -201,6 +201,8 @@ let wantLock = false;
 let lockHintOnce = false;
 let lockAskedAt = 0;
 let padBoost = 0;
+let lookFreeze = 0;
+let chevrons = [];
 let suppressShot = 0;
 let invulnT = 0;
 let lookSens = 1;
@@ -1507,8 +1509,10 @@ function makeLabel(text) {
 }
 
 function signpostPad(px, pz) {
-  const s = findCell("S");
-  const sx = worldX(s.c), sz = worldZ(s.r);
+  for (let i = 0; i < chevrons.length; i++) scene.remove(chevrons[i]);
+  chevrons.length = 0;
+  const sx = player ? player.x : worldX(findCell("S").c);
+  const sz = player ? player.z : worldZ(findCell("S").r);
   const dx = px - sx, dz = pz - sz;
   const len = Math.hypot(dx, dz) || 1;
   const ux = dx / len, uz = dz / len;
@@ -1519,7 +1523,7 @@ function signpostPad(px, pz) {
   shape.lineTo(0.62, -0.4);
   shape.closePath();
   const geo = new THREE.ShapeGeometry(shape);
-  const stops = [0.22, 0.44, 0.66, 0.88];
+  const stops = [0.2, 0.4, 0.6, 0.8, 0.95];
   for (let i = 0; i < stops.length; i++) {
     const t = len * stops[i];
     const chev = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: 0xffd040, side: THREE.DoubleSide }));
@@ -1527,6 +1531,7 @@ function signpostPad(px, pz) {
     chev.rotation.x = -Math.PI / 2;
     chev.rotation.z = -yaw;
     scene.add(chev);
+    chevrons.push(chev);
   }
 }
 
@@ -1649,7 +1654,9 @@ function markOpener(e) {
   );
   sash.position.y = 1.08;
   e.group.add(sash);
-  e.group.scale.set(1.42, 1.42, 1.42);
+  e.group.scale.set(1.55, 1.55, 1.55);
+  const fat = e.group.getObjectByName("hit");
+  if (fat) fat.scale.set(1.8, 1.35, 1.8);
 }
 
 function spawnBarrel(x, z) {
@@ -1932,6 +1939,22 @@ function hitscan(w) {
     .add(right.multiplyScalar(hx))
     .add(new THREE.Vector3(0, -0.12, 0));
   addTracer(muzzlePos, end);
+  if (!best) {
+    for (let i = 0; i < enemies.length; i++) {
+      const e = enemies[i];
+      if (e.dead) continue;
+      const to = new THREE.Vector3(e.x - origin.x, e.y + 1.05 - origin.y, e.z - origin.z);
+      const dist = to.length();
+      if (dist > 22) continue;
+      to.normalize();
+      if (to.dot(dir) > (e.opener ? 0.72 : 0.92)) {
+        best = e;
+        bestD = dist;
+        part = origin.y + dir.y * dist > e.y + 1.38 ? "head" : "body";
+        break;
+      }
+    }
+  }
   if (!best) {
     const wall = nearestWallHit(end.x, end.y, end.z);
     if (wall) addDecal(end.x, end.y, end.z, wall);
@@ -2286,10 +2309,98 @@ function resetPlayer() {
   gunRecoil = 0;
   timeAlive = 0;
   padBoost = 0;
+  lookFreeze = 0.55;
   invulnT = 3.2;
   hitCueT = 0;
   hitMarkT = 0;
   if (gunRoot) swapGun();
+}
+
+function applyLook() {
+  if (!camera || !player) return;
+  camera.position.set(player.x, player.y + PLAYER_H, player.z);
+  camera.rotation.order = "YXZ";
+  camera.rotation.y = -player.yaw;
+  camera.rotation.x = player.pitch;
+  camera.rotation.z = 0;
+  camera.updateMatrixWorld(true);
+}
+
+function camForward() {
+  const d = new THREE.Vector3(0, 0, -1);
+  if (camera) camera.getWorldDirection(d);
+  d.y = 0;
+  if (d.lengthSq() < 1e-6) d.set(1, 0, 0);
+  return d.normalize();
+}
+
+function openRay(lx, lz) {
+  if (!player) return 0;
+  let d = 0;
+  for (let i = 1; i <= 28; i++) {
+    const x = player.x + lx * i * 1.6;
+    const z = player.z + lz * i * 1.6;
+    const c = Math.round(x / TILE + W / 2);
+    const r = Math.round(z / TILE + 2);
+    const ch = cell(c, r);
+    if (isWall(ch) || ch === "D" || ch === "g" || ch === "l") return d;
+    d = i * 1.6;
+  }
+  return d;
+}
+
+function faceTheYard() {
+  if (!player || !camera) return;
+  let bestYaw = player.yaw, best = -1;
+  for (let i = 0; i < 16; i++) {
+    player.yaw = i * Math.PI / 8;
+    player.pitch = 0.16;
+    applyLook();
+    const f = camForward();
+    const d = openRay(f.x, f.z);
+    if (d > best) {
+      best = d;
+      bestYaw = player.yaw;
+    }
+  }
+  player.yaw = bestYaw;
+  player.pitch = 0.16;
+  applyLook();
+}
+
+function seatOpening() {
+  if (!player || !camera) return;
+  faceTheYard();
+  const f = camForward();
+  let pad = pads.find((p) => p.yard);
+  if (!pad) {
+    placePad(player.x + f.x * 8.4, 0, player.z + f.z * 8.4, true, true);
+    pad = pads.find((p) => p.yard);
+  }
+  if (pad) {
+    pad.x = player.x + f.x * 8.4;
+    pad.z = player.z + f.z * 8.4;
+    pad.group.position.set(pad.x, pad.y, pad.z);
+  }
+  let e = enemies.find((en) => en.opener);
+  if (!e) {
+    spawnEnemy(player.x + f.x * 13.8, 0, player.z + f.z * 13.8, false);
+    markOpener(enemies[enemies.length - 1]);
+    e = enemies.find((en) => en.opener);
+  }
+  if (e) {
+    e.x = player.x + f.x * 13.8;
+    e.z = player.z + f.z * 13.8;
+    e.group.position.set(e.x, e.y, e.z);
+  }
+  const meal = pickups.find((p) => p.kind === "health" && p.yard);
+  if (meal) {
+    const rx = -f.z, rz = f.x;
+    meal.x = player.x + f.x * 10.6 + rx * 2.1;
+    meal.z = player.z + f.z * 10.6 + rz * 2.1;
+    meal.mesh.position.set(meal.x, meal.y, meal.z);
+  }
+  if (pad) signpostPad(pad.x, pad.z);
 }
 
 function losBlock(ch) {
@@ -2447,16 +2558,16 @@ function buildLevel() {
   spawnFill.position.set(worldX(yard.c + 2), 4.2, worldZ(yard.r));
   scene.add(spawnFill);
   const fx = worldX(yard.c + 12), fz = worldZ(Math.max(1, yard.r - 2));
-  const basin = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.32, 0.36, 10), new THREE.MeshLambertMaterial({ color: 0xc8b070, emissive: 0x3a2a10, flatShading: true }));
+  const basin = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.32, 0.36, 10), new THREE.MeshLambertMaterial({ color: 0x6a4a30, emissive: 0x1a1008, flatShading: true }));
   basin.position.set(fx, 0.18, fz);
   scene.add(basin);
-  const water = new THREE.Mesh(new THREE.CylinderGeometry(0.88, 0.88, 0.12, 10), new THREE.MeshLambertMaterial({ color: 0x50b0d0, emissive: 0x103040, flatShading: true }));
+  const water = new THREE.Mesh(new THREE.CylinderGeometry(0.88, 0.88, 0.12, 10), new THREE.MeshLambertMaterial({ color: 0x3a6a78, emissive: 0x0a2030, flatShading: true }));
   water.position.set(fx, 0.4, fz);
   scene.add(water);
-  const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.22, 1.15, 8), new THREE.MeshLambertMaterial({ color: 0xb8a060, emissive: 0x2a2008, flatShading: true }));
+  const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.22, 1.15, 8), new THREE.MeshLambertMaterial({ color: 0x5a4030, emissive: 0x140c08, flatShading: true }));
   stem.position.set(fx, 0.98, fz);
   scene.add(stem);
-  const top = new THREE.Mesh(new THREE.CylinderGeometry(0.58, 0.36, 0.24, 8), new THREE.MeshLambertMaterial({ color: 0x68b8c8, emissive: 0x143848, flatShading: true }));
+  const top = new THREE.Mesh(new THREE.CylinderGeometry(0.58, 0.36, 0.24, 8), new THREE.MeshLambertMaterial({ color: 0x3a6870, emissive: 0x0a2028, flatShading: true }));
   top.position.set(fx, 1.6, fz);
   scene.add(top);
   const fountLit = new THREE.PointLight(0x88a8b8, 0.35, 8, 1.6);
@@ -2688,12 +2799,7 @@ function startGame() {
   initAudio();
   if (window.pauseTitleMusic) window.pauseTitleMusic();
   resetPlayer();
-  if (camera && player) {
-    camera.position.set(player.x, player.y + PLAYER_H, player.z);
-    camera.rotation.order = "YXZ";
-    camera.rotation.y = -player.yaw;
-    camera.rotation.x = player.pitch;
-  }
+  seatOpening();
   for (const e of enemies) {
     e.dead = false; e.hp = e.max; e.group.visible = true; e.state = "idle";
     e.nextShot = 2.8 + Math.random();
@@ -2802,6 +2908,7 @@ function bind() {
     if (pointerLocked) {
       wantLock = false;
       clearLockHint();
+      if (started) lookFreeze = Math.max(lookFreeze, 0.35);
     }
     if (!pointerLocked && ignoreUnlock) ignoreUnlock = false;
   };
@@ -2814,7 +2921,7 @@ function bind() {
       sensFromUiX(uiPos(e).x);
       return;
     }
-    if (!started || !player || optionsOpen) return;
+    if (!started || !player || optionsOpen || lookFreeze > 0) return;
     player.yaw -= e.movementX * 0.00215 * lookSens;
     player.pitch -= e.movementY * 0.00215 * lookSens;
     player.pitch = Math.max(-1.2, Math.min(1.2, player.pitch));
@@ -2907,6 +3014,7 @@ function tick(dt) {
     return;
   }
   timeAlive += dt;
+  if (lookFreeze > 0) lookFreeze -= dt;
   if (invulnT > 0) invulnT -= dt;
   if (msgT > 0) msgT -= dt;
   if (dmgT > 0) dmgT -= dt;
@@ -2923,14 +3031,15 @@ function tick(dt) {
   const running = actionHeld("run");
   const sp = running ? RUN : MOVE;
   const len = Math.hypot(ix, iz) || 1;
-  const cy = Math.cos(player.yaw), sy = Math.sin(player.yaw);
-  let wishX = (ix / len) * cy + (iz / len) * sy;
-  let wishZ = (iz / len) * cy - (ix / len) * sy;
+  applyLook();
+  const fwd = camForward();
+  const rx = -fwd.z, rz = fwd.x;
+  let wishX = ((-iz) * fwd.x + ix * rx) / len;
+  let wishZ = ((-iz) * fwd.z + ix * rz) / len;
   if (padBoost > 0) {
     padBoost -= dt;
-    const lx = -Math.sin(player.yaw), lz = -Math.cos(player.yaw);
-    wishX += lx * 0.85;
-    wishZ += lz * 0.85;
+    wishX += fwd.x * 0.85;
+    wishZ += fwd.z * 0.85;
   }
   const moving = ix || iz || padBoost > 0;
   const airborne = !player.onGround;
@@ -2983,13 +3092,26 @@ function tick(dt) {
     p.disk.position.y = (p.yard ? 0.16 : 0.1) + bobY + (p.flash > 0 ? 0.08 : 0);
     if (p.column) p.column.scale.y = 1 + Math.sin(titleT * 5 + p.z) * 0.06;
     if (p.cool > 0) continue;
-    if (Math.hypot(player.x - p.x, player.z - p.z) < (p.yard ? 2.45 : 1.18) && player.y < p.y + 2.2 && player.y > p.y - 0.5) {
+    const pdx = player.x - p.x, pdz = player.z - p.z;
+    const onDisk = Math.hypot(pdx, pdz) < (p.yard ? 3.6 : 1.18);
+    let onPath = false;
+    if (p.yard && player) {
+      const sx = worldX(findCell("S").c), sz = worldZ(findCell("S").r);
+      const vx = p.x - sx, vz = p.z - sz;
+      const plen = Math.hypot(vx, vz) || 1;
+      const t = ((player.x - sx) * vx + (player.z - sz) * vz) / (plen * plen);
+      if (t > 0.45 && t < 1.15) {
+        const cx = sx + vx * t, cz = sz + vz * t;
+        onPath = Math.hypot(player.x - cx, player.z - cz) < 2.2;
+      }
+    }
+    if ((onDisk || onPath) && player.y < p.y + 2.4 && player.y > p.y - 0.6) {
       player.vy = PAD_UP;
       player.onGround = false;
       padBoost = 0.5;
-      const lx = -Math.sin(player.yaw), lz = -Math.cos(player.yaw);
-      player.x += lx * 0.6;
-      player.z += lz * 0.6;
+      const f = camForward();
+      player.x += f.x * 0.6;
+      player.z += f.z * 0.6;
       p.cool = 0.45;
       p.flash = 1;
       SFX.pad();
