@@ -33,9 +33,9 @@
 const TILE = 3.2;
 const WALL_H = 4.6;
 const CAT_H = 3.5;
-const FOV = 105;
-const MOVE = 14.2;
-const RUN = 23.5;
+const FOV = 108;
+const MOVE = 15.4;
+const RUN = 25.2;
 const JUMP = 8.4;
 const GRAV = 28;
 const PAD_UP = 17.2;
@@ -49,13 +49,13 @@ const UH = 200;
 
 const MAP = [
   "####################################",
-  "#S^~^~^.T..1.PQY....^..*############",
-  "#~~t~~~...........................##",
-  "#~~1~B~#############################",
-  "#~~~~~^#                          ##",
-  "#~~~~~~D~~~~~~~~~~~~~~~~~~~~~~~~~~##",
-  "####.###############################",
-  "#....1.....^......................##",
+  "#S~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~##",
+  "#1~~~~~~~~~~~M~~~~~~~~~~~~~~~~~~~~##",
+  "#~~~~~t~~~~~~~~~~~~~~~~~~~~~~~~~~~##",
+  "#~~T~~~1~~~~~Z~~~~~~~~~~~~~~B~~~~~##",
+  "#~~~~~~PQY...............*~~~~~~~~##",
+  "###########D########################",
+  "#....1..R..^......................##",
   "#.........^^.........1............##",
   "#....A............................##",
   "##########D#########################",
@@ -66,7 +66,7 @@ const MAP = [
   "#..^........................^.....##",
   "#............F.F.F................##",
   "#....1.................1..........##",
-  "#.....................M...........##",
+  "#.....................U...........##",
   "#######g###########D################",
   "#....1............#..^^....1......##",
   "#..^^....#####....#...............##",
@@ -150,6 +150,8 @@ let pushwalls = [];
 let elevators = [];
 let barrels = [];
 let tracers = [];
+let rockets = [];
+let stepT = 0;
 let keys = { gold: false, silver: false };
 let player;
 let gunRoot, muzzle, gunFlash, gunLight;
@@ -177,14 +179,16 @@ let wasOnGround = false;
 let held = {};
 
 const weps = [
-  { id: "pistol", name: "PISTOL", dmg: 24, rpm: 210, mag: 12, reserve: 48, spread: 0.01, auto: false, kick: 0.055 },
-  { id: "mp40", name: "MP40", dmg: 15, rpm: 560, mag: 32, reserve: 0, spread: 0.026, auto: true, kick: 0.032 },
-  { id: "nade", name: "FIREBOMB", dmg: 95, rpm: 68, mag: 4, reserve: 0, spread: 0, auto: false, kick: 0.09, nade: true }
+  { id: "pistol", name: "PISTOL", dmg: 26, rpm: 200, mag: 12, reserve: 48, spread: 0.01, auto: false, kick: 0.08 },
+  { id: "mp40", name: "MP40", dmg: 16, rpm: 540, mag: 32, reserve: 0, spread: 0.024, auto: true, kick: 0.045 },
+  { id: "bazooka", name: "BAZOOKA", dmg: 110, rpm: 55, mag: 6, reserve: 0, spread: 0, auto: false, kick: 0.14, rocket: "bazooka" },
+  { id: "heat", name: "SEEKER", dmg: 80, rpm: 70, mag: 5, reserve: 0, spread: 0, auto: false, kick: 0.11, rocket: "heat" },
+  { id: "drunk", name: "DRUNK", dmg: 38, rpm: 48, mag: 4, reserve: 0, spread: 0, auto: false, kick: 0.16, rocket: "drunk" }
 ];
 let wepI = 0;
-let mag = [12, 0, 0];
-let reserve = [48, 0, 0];
-let have = [true, false, false];
+let mag = [12, 0, 0, 0, 0];
+let reserve = [48, 0, 0, 0, 0];
+let have = [true, false, false, false, false];
 let lastShot = 0;
 let reloading = 0;
 let mouseDown = false;
@@ -274,8 +278,12 @@ function makeTextures() {
     return [b + n, 40 + n * 0.4, 26];
   });
   dirtTex = texNoise(64, (x, y) => {
-    const n = (hash(x, y) * 24) | 0;
-    return [78 + n, 56 + n * 0.5, 32];
+    const tile = (x >> 4) ^ (y >> 4);
+    const n = (hash(x, y) * 22) | 0;
+    const edge = (x & 15) < 1 || (y & 15) < 1;
+    if (edge) return [48, 34, 18];
+    const b = tile ? 92 : 74;
+    return [b + n, 58 + n * 0.45, 30];
   });
   metalTex = texNoise(64, (x, y) => {
     const n = (hash(x, y) * 14) | 0;
@@ -404,10 +412,12 @@ function playNoise(dur, vol, freq, type) {
   if (!ac) return;
   const s = ac.createBufferSource();
   s.buffer = noiseBuf(dur);
-  const f = env(type || "lowpass", freq || 1800);
+  const f = env(type || "lowpass", freq || 1800, type === "bandpass" ? 1.2 : 0.8);
   const g = ac.createGain();
-  g.gain.setValueAtTime(vol, ac.currentTime);
-  g.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + dur);
+  const t = ac.currentTime;
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(Math.max(0.001, vol), t + 0.004);
+  g.gain.exponentialRampToValueAtTime(0.001, t + dur);
   s.connect(f); f.connect(g); g.connect(ac.destination);
   s.start();
 }
@@ -420,63 +430,96 @@ function playOsc(freq, dur, type, vol, slide) {
   o.type = type;
   o.frequency.setValueAtTime(freq, t);
   if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(20, slide), t + dur);
-  g.gain.setValueAtTime(vol, t);
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(Math.max(0.001, vol), t + 0.006);
   g.gain.exponentialRampToValueAtTime(0.001, t + dur);
   o.connect(g); g.connect(ac.destination);
   o.start(t); o.stop(t + dur);
 }
 
+function thump(freq, dur, vol) {
+  playOsc(freq, dur, "sine", vol, freq * 0.35);
+  playOsc(freq * 0.55, dur * 1.15, "triangle", vol * 0.55, freq * 0.22);
+}
+
+function crack(vol) {
+  playNoise(0.018, vol, 7000, "highpass");
+  playNoise(0.055, vol * 0.75, 2400, "bandpass");
+}
+
 const SFX = {
   shoot() {
-    playNoise(0.07, 0.42, 3200, "bandpass");
-    playNoise(0.11, 0.28, 900, "lowpass");
-    playOsc(140, 0.08, "triangle", 0.16, 48);
+    crack(0.85);
+    playNoise(0.12, 0.55, 900, "lowpass");
+    thump(78, 0.14, 0.72);
+    playOsc(190, 0.05, "square", 0.12, 60);
   },
   mp40() {
-    playNoise(0.045, 0.34, 3800, "bandpass");
-    playNoise(0.06, 0.2, 700, "lowpass");
-    playOsc(110, 0.04, "square", 0.08, 40);
+    crack(0.62);
+    playNoise(0.07, 0.42, 1100, "lowpass");
+    thump(88, 0.08, 0.48);
   },
-  nade() {
-    playNoise(0.42, 0.55, 380, "lowpass");
-    playOsc(70, 0.35, "sawtooth", 0.22, 28);
-    playOsc(40, 0.4, "sine", 0.18, 20);
+  bazooka() {
+    playNoise(0.16, 0.55, 1800, "bandpass");
+    playNoise(0.22, 0.4, 500, "lowpass");
+    thump(62, 0.2, 0.7);
+    playOsc(240, 0.18, "sawtooth", 0.16, 70);
+  },
+  heat() {
+    playNoise(0.2, 0.4, 2600, "bandpass");
+    playOsc(420, 0.22, "sawtooth", 0.14, 90);
+    thump(70, 0.16, 0.55);
+  },
+  drunk() {
+    playNoise(0.14, 0.38, 1600, "bandpass");
+    playOsc(180, 0.12, "square", 0.12, 50);
+    playOsc(260, 0.16, "sawtooth", 0.1, 80);
+    thump(64, 0.18, 0.6);
+  },
+  boom() {
+    playNoise(0.45, 0.85, 320, "lowpass");
+    playNoise(0.18, 0.5, 1800, "highpass");
+    thump(48, 0.5, 0.95);
+    thump(92, 0.22, 0.45);
+    playOsc(36, 0.4, "sine", 0.4, 18);
   },
   reload() {
-    playOsc(180, 0.06, "triangle", 0.1);
-    setTimeout(() => playOsc(240, 0.07, "triangle", 0.1), 110);
-    setTimeout(() => playNoise(0.05, 0.08, 1200, "highpass"), 200);
+    playOsc(180, 0.06, "triangle", 0.12);
+    setTimeout(() => playOsc(240, 0.07, "triangle", 0.12), 110);
+    setTimeout(() => playNoise(0.05, 0.1, 1200, "highpass"), 200);
   },
   pickup() {
-    playOsc(440, 0.07, "square", 0.12);
-    setTimeout(() => playOsc(660, 0.09, "square", 0.12), 60);
-    setTimeout(() => playOsc(880, 0.08, "triangle", 0.1), 120);
+    playOsc(440, 0.07, "square", 0.14);
+    setTimeout(() => playOsc(660, 0.09, "square", 0.14), 60);
+    setTimeout(() => playOsc(880, 0.08, "triangle", 0.12), 120);
   },
   door() {
-    playNoise(0.28, 0.2, 420, "lowpass");
-    playOsc(70, 0.3, "sawtooth", 0.12, 36);
+    playNoise(0.28, 0.28, 420, "lowpass");
+    playOsc(70, 0.3, "sawtooth", 0.16, 36);
   },
   pad() {
-    playOsc(90, 0.22, "sine", 0.2, 520);
-    playOsc(140, 0.16, "triangle", 0.14, 380);
-    playNoise(0.12, 0.16, 1400, "bandpass");
+    playOsc(90, 0.22, "sine", 0.28, 520);
+    playOsc(140, 0.16, "triangle", 0.18, 380);
+    playNoise(0.12, 0.22, 1400, "bandpass");
+    thump(70, 0.16, 0.35);
   },
   pain() {
-    playOsc(160, 0.14, "sawtooth", 0.16, 60);
-    playNoise(0.1, 0.12, 600, "lowpass");
+    playOsc(160, 0.14, "sawtooth", 0.2, 60);
+    playNoise(0.1, 0.16, 600, "lowpass");
   },
   death() {
-    playNoise(0.45, 0.38, 480, "lowpass");
-    playOsc(90, 0.4, "sawtooth", 0.18, 32);
+    playNoise(0.45, 0.5, 480, "lowpass");
+    playOsc(90, 0.4, "sawtooth", 0.22, 32);
   },
   gib() {
-    playNoise(0.16, 0.28, 1100, "bandpass");
-    playOsc(70, 0.12, "square", 0.08, 30);
+    playNoise(0.16, 0.38, 1100, "bandpass");
+    playOsc(70, 0.12, "square", 0.12, 30);
   },
-  jump() { playOsc(210, 0.06, "sine", 0.05, 130); },
+  jump() { playOsc(210, 0.06, "sine", 0.07, 130); },
+  step() { thump(110, 0.05, 0.12); playNoise(0.04, 0.06, 700, "lowpass"); },
   enemyShot() {
-    playNoise(0.05, 0.12, 2200, "bandpass");
-    playOsc(80, 0.05, "square", 0.05, 36);
+    crack(0.28);
+    thump(70, 0.06, 0.18);
   }
 };
 
@@ -629,7 +672,7 @@ function paintTitle(g, t) {
   g.fillRect(92, 168, 1, 26);
   g.fillRect(227, 168, 1, 26);
   const pulse = 0.7 + Math.sin(t * 5) * 0.3;
-  drawText(g, musicBlocked && !musicReady ? "CLICK FOR MUSIC" : "NEW GAME", 160, 174, pulse > 0.6 ? "#f0d080" : "#c9a050", 1, "center");
+  drawText(g, "CLICK TO PLAY", 160, 174, pulse > 0.6 ? "#f0d080" : "#c9a050", 1, "center");
   drawText(g, musicMuted ? "M MUTED" : "M SOUND", 160, 184, "#886848", 1, "center");
 }
 
@@ -672,7 +715,7 @@ function paintHUD(g) {
   drawText(g, "HP", 70, 180, "#886848", 1);
   drawText(g, String(ar), 88, 178, "#80a0c0", 1);
   drawText(g, "ARM", 110, 178, "#886848", 1);
-  drawText(g, currentWep().name, 140, 174, "#e8d0a0", 1);
+  drawText(g, (wepI + 1) + " " + currentWep().name, 140, 174, "#e8d0a0", 1);
   drawText(g, mag[wepI] + "/" + reserve[wepI], 140, 184, "#c0a070", 1);
   const k = [];
   if (keys.gold) k.push("GOLD");
@@ -808,7 +851,7 @@ function spawnEnemy(x, y, z, tough) {
   enemies.push({
     group: g, body, head, x, y, z, vx: 0, vz: 0,
     hp: tough ? 150 : 72, max: tough ? 150 : 72, tough,
-    state: "idle", nextShot: 0.6 + Math.random(), dead: false, hurt: 0
+    state: "idle", nextShot: 1.35 + Math.random(), dead: false, hurt: 0
   });
 }
 
@@ -922,38 +965,69 @@ function tryMove(dx, dy, dz) {
 
 function currentWep() { return weps[wepI]; }
 
+function metalMat(color, emissive) {
+  return new THREE.MeshLambertMaterial({ color, emissive: emissive || 0x000000, flatShading: true });
+}
+
 function buildGun(id) {
   const g = new THREE.Group();
   if (id === "pistol") {
-    const grip = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.16, 0.08), new THREE.MeshLambertMaterial({ color: 0x4a2a14, flatShading: true }));
+    const grip = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.16, 0.08), metalMat(0x4a2a14));
     grip.position.set(0.24, -0.3, -0.42);
     grip.rotation.x = 0.35;
-    const frame = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.09, 0.22), new THREE.MeshLambertMaterial({ color: 0x2a2a22, flatShading: true }));
+    const frame = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.09, 0.22), metalMat(0x2a2a22));
     frame.position.set(0.24, -0.22, -0.52);
-    const slide = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.05, 0.2), new THREE.MeshLambertMaterial({ color: 0x3a3a32, flatShading: true }));
+    const slide = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.05, 0.2), metalMat(0x3a3a32));
     slide.position.set(0.24, -0.17, -0.54);
-    const barrel = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.035, 0.16), new THREE.MeshLambertMaterial({ color: 0x1a1a16, flatShading: true }));
+    const barrel = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.035, 0.16), metalMat(0x1a1a16));
     barrel.position.set(0.24, -0.2, -0.7);
     g.add(grip, frame, slide, barrel);
   } else if (id === "mp40") {
-    const rec = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.1, 0.36), new THREE.MeshLambertMaterial({ color: 0x2c2c24, flatShading: true }));
+    const rec = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.1, 0.36), metalMat(0x2c2c24));
     rec.position.set(0.26, -0.22, -0.55);
-    const wood = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.07, 0.16), new THREE.MeshLambertMaterial({ color: 0x5a3a18, flatShading: true }));
+    const wood = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.07, 0.16), metalMat(0x5a3a18));
     wood.position.set(0.26, -0.3, -0.42);
-    const magz = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.22, 0.08), new THREE.MeshLambertMaterial({ color: 0x33332a, flatShading: true }));
+    const magz = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.22, 0.08), metalMat(0x33332a));
     magz.position.set(0.26, -0.36, -0.52);
-    const barrel = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.04, 0.28), new THREE.MeshLambertMaterial({ color: 0x1a1a16, flatShading: true }));
+    const barrel = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.04, 0.28), metalMat(0x1a1a16));
     barrel.position.set(0.26, -0.2, -0.82);
-    const jacket = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.055, 0.18), new THREE.MeshLambertMaterial({ color: 0x3a3a30, flatShading: true }));
+    const jacket = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.055, 0.18), metalMat(0x3a3a30));
     jacket.position.set(0.26, -0.2, -0.78);
     g.add(rec, wood, magz, barrel, jacket);
+  } else if (id === "bazooka") {
+    const tube = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.06, 0.72, 8), metalMat(0x3a3a22));
+    tube.rotation.x = Math.PI / 2;
+    tube.position.set(0.28, -0.2, -0.62);
+    const wood = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.1, 0.18), metalMat(0x5a3a14));
+    wood.position.set(0.28, -0.3, -0.4);
+    const rear = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.05, 0.1, 8), metalMat(0x2a2a18));
+    rear.rotation.x = Math.PI / 2;
+    rear.position.set(0.28, -0.2, -0.28);
+    const sight = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.08, 0.04), metalMat(0x222));
+    sight.position.set(0.28, -0.12, -0.5);
+    g.add(tube, wood, rear, sight);
+  } else if (id === "heat") {
+    const tube = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.055, 0.62, 8), metalMat(0x2a2a28));
+    tube.rotation.x = Math.PI / 2;
+    tube.position.set(0.26, -0.2, -0.58);
+    const nose = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.12, 8), metalMat(0x8a2010, 0x401000));
+    nose.rotation.x = Math.PI / 2;
+    nose.position.set(0.26, -0.2, -0.92);
+    const box = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.2), metalMat(0x3a3a30));
+    box.position.set(0.26, -0.22, -0.4);
+    g.add(tube, nose, box);
   } else {
-    const can = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.08, 0.2, 8), new THREE.MeshLambertMaterial({ color: 0x6a3a14, emissive: 0x221000, flatShading: true }));
-    can.position.set(0.24, -0.24, -0.5);
-    can.rotation.x = 0.8;
-    const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.04, 0.08, 6), new THREE.MeshLambertMaterial({ color: 0x333, flatShading: true }));
-    cap.position.set(0.24, -0.16, -0.42);
-    g.add(can, cap);
+    const left = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.045, 0.5, 8), metalMat(0x4a3a18));
+    const right = left.clone();
+    left.rotation.x = Math.PI / 2;
+    right.rotation.x = Math.PI / 2;
+    left.position.set(0.2, -0.2, -0.58);
+    right.position.set(0.32, -0.2, -0.58);
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.12, 0.22), metalMat(0x3a2a14));
+    body.position.set(0.26, -0.24, -0.38);
+    const grip = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.14, 0.08), metalMat(0x4a2a10));
+    grip.position.set(0.26, -0.34, -0.34);
+    g.add(left, right, body, grip);
   }
   return g;
 }
@@ -985,7 +1059,13 @@ function swapGun() {
 function fire() {
   const w = currentWep();
   if (reloading > 0) return;
-  if (mag[wepI] <= 0) { startReload(); return; }
+  if (mag[wepI] <= 0) {
+    if (w.rocket && reserve[wepI] > 0) {
+      const take = Math.min(w.mag, reserve[wepI]);
+      mag[wepI] += take;
+      reserve[wepI] -= take;
+    } else { startReload(); return; }
+  }
   const now = performance.now() / 1000;
   if (now - lastShot < 60 / w.rpm) return;
   lastShot = now;
@@ -994,8 +1074,12 @@ function fire() {
   gunRecoil = 1;
   if (muzzle) { muzzle.intensity = 5.5; muzzle.visible = true; }
   if (gunFlash) { gunFlash.visible = true; gunFlash.rotation.z = Math.random() * 6; }
-  if (w.nade) { SFX.nade(); throwNade(); }
-  else {
+  if (w.rocket) {
+    if (w.id === "bazooka") SFX.bazooka();
+    else if (w.id === "heat") SFX.heat();
+    else SFX.drunk();
+    launchRockets(w);
+  } else {
     if (w.id === "mp40") SFX.mp40(); else SFX.shoot();
     hitscan(w);
   }
@@ -1042,29 +1126,149 @@ function addTracer(a, b) {
   tracers.push({ mesh: line, life: 0.05 });
 }
 
-function throwNade() {
-  const dir = new THREE.Vector3();
-  camera.getWorldDirection(dir);
-  const mesh = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.09, 0.16, 8), new THREE.MeshLambertMaterial({ color: 0x553311, flatShading: true }));
-  const o = camera.getWorldPosition(new THREE.Vector3());
-  mesh.position.copy(o).add(dir.clone().multiplyScalar(0.8));
-  scene.add(mesh);
-  gibs.push({ mesh, vx: dir.x * 16, vy: dir.y * 16 + 3.2, vz: dir.z * 16, life: 1.12, nade: true });
+function makeRocketMesh(kind) {
+  const g = new THREE.Group();
+  const body = new THREE.Mesh(
+    new THREE.CylinderGeometry(kind === "bazooka" ? 0.08 : 0.055, kind === "bazooka" ? 0.09 : 0.06, 0.42, 7),
+    metalMat(kind === "heat" ? 0x6a2010 : 0x4a3a18, kind === "heat" ? 0x331000 : 0x221100)
+  );
+  body.rotation.x = Math.PI / 2;
+  const nose = new THREE.Mesh(
+    new THREE.ConeGeometry(kind === "bazooka" ? 0.09 : 0.06, 0.16, 7),
+    metalMat(kind === "drunk" ? 0x8a6a20 : 0x8a3010, 0x401000)
+  );
+  nose.rotation.x = Math.PI / 2;
+  nose.position.z = -0.26;
+  const glow = new THREE.Mesh(new THREE.SphereGeometry(0.07, 6, 6), new THREE.MeshBasicMaterial({ color: 0xff6622 }));
+  glow.position.z = 0.22;
+  g.add(body, nose, glow);
+  return g;
 }
 
-function explode(x, y, z) {
-  SFX.nade();
+function spawnRocket(kind, origin, dir, wobble) {
+  const speed = kind === "bazooka" ? 28 : kind === "heat" ? 20 : 18;
+  const mesh = makeRocketMesh(kind);
+  mesh.position.copy(origin);
+  mesh.lookAt(origin.clone().add(dir));
+  scene.add(mesh);
+  rockets.push({
+    mesh, kind,
+    x: origin.x, y: origin.y, z: origin.z,
+    vx: dir.x * speed, vy: dir.y * speed, vz: dir.z * speed,
+    speed,
+    life: kind === "drunk" ? 2.4 : 2.8,
+    phase: Math.random() * 6.3,
+    wobble: wobble || 0,
+    dmg: kind === "bazooka" ? 110 : kind === "heat" ? 80 : 38,
+    radius: kind === "bazooka" ? 5.8 : kind === "heat" ? 4.2 : 3.4
+  });
+}
+
+function launchRockets(w) {
+  const dir = new THREE.Vector3();
+  camera.getWorldDirection(dir);
+  const o = camera.getWorldPosition(new THREE.Vector3()).add(dir.clone().multiplyScalar(0.9));
+  if (w.rocket === "drunk") {
+    for (let i = 0; i < 6; i++) {
+      const d = dir.clone();
+      d.x += (Math.random() - 0.5) * 0.55;
+      d.y += (Math.random() - 0.5) * 0.22;
+      d.z += (Math.random() - 0.5) * 0.55;
+      d.normalize();
+      spawnRocket("drunk", o.clone(), d, 22 + Math.random() * 10);
+    }
+  } else {
+    spawnRocket(w.rocket, o, dir, 0);
+  }
+}
+
+function rocketHitSolid(x, y, z) {
+  for (const s of solids) {
+    if (s._open) continue;
+    if (x > s.minx && x < s.maxx && y > s.miny && y < s.maxy && z > s.minz && z < s.maxz) return true;
+  }
+  return false;
+}
+
+function nearestEnemy(x, y, z) {
+  let best = null, bestD = 36;
+  for (const e of enemies) {
+    if (e.dead) continue;
+    const d = Math.hypot(e.x - x, e.y + 1.1 - y, e.z - z);
+    if (d < bestD) { best = e; bestD = d; }
+  }
+  return best;
+}
+
+function updateRockets(dt) {
+  for (let i = rockets.length - 1; i >= 0; i--) {
+    const r = rockets[i];
+    if (r.kind === "heat") {
+      const e = nearestEnemy(r.x, r.y, r.z);
+      if (e) {
+        const dx = e.x - r.x, dy = e.y + 1.05 - r.y, dz = e.z - r.z;
+        const len = Math.hypot(dx, dy, dz) || 1;
+        const steer = 10 * dt;
+        r.vx += (dx / len) * r.speed * steer;
+        r.vy += (dy / len) * r.speed * steer;
+        r.vz += (dz / len) * r.speed * steer;
+        const sp = Math.hypot(r.vx, r.vy, r.vz) || 1;
+        r.vx = r.vx / sp * r.speed;
+        r.vy = r.vy / sp * r.speed;
+        r.vz = r.vz / sp * r.speed;
+      }
+    }
+    if (r.kind === "drunk") {
+      r.phase += dt * 14;
+      r.vx += Math.sin(r.phase) * r.wobble * dt;
+      r.vy += Math.cos(r.phase * 0.7) * r.wobble * 0.35 * dt;
+      r.vz += Math.cos(r.phase * 1.3) * r.wobble * dt;
+    }
+    r.x += r.vx * dt;
+    r.y += r.vy * dt;
+    r.z += r.vz * dt;
+    r.life -= dt;
+    r.mesh.position.set(r.x, r.y, r.z);
+    r.mesh.lookAt(r.x + r.vx, r.y + r.vy, r.z + r.vz);
+    if (Math.random() < 0.6) {
+      const spark = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, 0.06), new THREE.MeshBasicMaterial({ color: r.kind === "heat" ? 0xff3311 : 0xff7722 }));
+      spark.position.set(r.x, r.y, r.z);
+      scene.add(spark);
+      gibs.push({ mesh: spark, vx: 0, vy: 0.2, vz: 0, life: 0.12 });
+    }
+    let hit = r.y < 0.12 || rocketHitSolid(r.x, r.y, r.z) || r.life <= 0;
+    let victim = null;
+    for (const e of enemies) {
+      if (e.dead) continue;
+      if (Math.hypot(e.x - r.x, e.z - r.z) < 0.7 && Math.abs(e.y + 1 - r.y) < 1.1) { hit = true; victim = e; break; }
+    }
+    for (const b of barrels) {
+      if (!b.dead && Math.hypot(b.x - r.x, b.z - r.z) < 0.8) { hit = true; boomBarrel(b); }
+    }
+    if (hit) {
+      explode(r.x, r.y, r.z, r.dmg, r.radius);
+      if (victim && !victim.dead) hurtEnemy(victim, r.dmg * 0.35, "body", new THREE.Vector3(r.x, r.y, r.z));
+      scene.remove(r.mesh);
+      rockets.splice(i, 1);
+    }
+  }
+}
+
+function explode(x, y, z, dmg, radius) {
+  SFX.boom();
   spawnGibs(x, y, z, 18, 0x442200);
+  dmg = dmg == null ? 95 : dmg;
+  radius = radius == null ? 5.6 : radius;
   for (const e of enemies) {
     if (e.dead) continue;
     const d = Math.hypot(e.x - x, e.z - z);
-    if (d < 5.6) hurtEnemy(e, 95 * (1 - d / 5.6), "body", new THREE.Vector3(e.x, 1, e.z));
+    if (d < radius) hurtEnemy(e, dmg * (1 - d / radius), "body", new THREE.Vector3(e.x, 1, e.z));
   }
   for (const b of barrels) {
-    if (!b.dead && Math.hypot(b.x - x, b.z - z) < 4) boomBarrel(b);
+    if (!b.dead && Math.hypot(b.x - x, b.z - z) < radius * 0.75) boomBarrel(b);
   }
   const pd = Math.hypot(player.x - x, player.z - z);
-  if (pd < 4.2) hurtPlayer(42 * (1 - pd / 4.2));
+  if (pd < radius * 0.75) hurtPlayer(42 * (1 - pd / (radius * 0.75)));
 }
 
 function boomBarrel(b) {
@@ -1133,6 +1337,7 @@ function win(secret) {
 function startReload() {
   if (reloading > 0) return;
   const w = currentWep();
+  if (w.rocket) return;
   if (mag[wepI] >= w.mag || reserve[wepI] <= 0) return;
   reloading = 0.85;
   SFX.reload();
@@ -1180,25 +1385,27 @@ function takePickup(p) {
   if (p.kind === "gold") keys.gold = true;
   if (p.kind === "silver") keys.silver = true;
   if (p.kind === "mp40") { have[1] = true; reserve[1] += 64; mag[1] = 32; wepI = 1; swapGun(); }
-  if (p.kind === "nade") { have[2] = true; reserve[2] += 6; if (mag[2] === 0) mag[2] = 4; wepI = 2; swapGun(); }
+  if (p.kind === "bazooka") { have[2] = true; reserve[2] += 8; if (mag[2] === 0) mag[2] = 6; wepI = 2; swapGun(); }
+  if (p.kind === "heat") { have[3] = true; reserve[3] += 6; if (mag[3] === 0) mag[3] = 5; wepI = 3; swapGun(); }
+  if (p.kind === "drunk") { have[4] = true; reserve[4] += 5; if (mag[4] === 0) mag[4] = 4; wepI = 4; swapGun(); }
   if (p.kind === "health") player.hp = Math.min(100, player.hp + 25);
-  if (p.kind === "ammo") reserve[wepI] += 24;
+  if (p.kind === "ammo") reserve[wepI] += weps[wepI].rocket ? 3 : 24;
   if (p.kind === "secret") win(true);
 }
 
 function resetPlayer() {
   const sc = MAP[1].indexOf("S");
   player = {
-    x: worldX(sc), y: 8.6, z: worldZ(1),
-    yaw: 0, pitch: 0.18,
+    x: worldX(sc), y: 0, z: worldZ(1),
+    yaw: Math.PI, pitch: 0.02,
     vx: 0, vy: 0, vz: 0,
-    onGround: false, hp: 100, armor: 0
+    onGround: true, hp: 100, armor: 0
   };
   keys.gold = keys.silver = false;
   wepI = 0;
-  mag = [12, 0, 0];
-  reserve = [48, 0, 0];
-  have = [true, false, false];
+  mag = [12, 0, 0, 0, 0];
+  reserve = [48, 0, 0, 0, 0];
+  have = [true, false, false, false, false];
   timeAlive = 0;
   if (gunRoot) swapGun();
 }
@@ -1272,11 +1479,17 @@ function buildLevel() {
   const mExit = new THREE.MeshLambertMaterial({ color: 0x28d050, emissive: 0x0a4018, flatShading: true });
 
   scene.background = skyTex;
-  scene.fog = new THREE.Fog(0x140a08, 7, 40);
-  scene.add(new THREE.AmbientLight(0x2a1c12, 0.22));
-  const sun = new THREE.DirectionalLight(0xc8a070, 0.28);
-  sun.position.set(12, 30, 8);
+  scene.fog = new THREE.Fog(0x24160e, 20, 68);
+  scene.add(new THREE.AmbientLight(0x3a2818, 0.32));
+  const sun = new THREE.DirectionalLight(0xd0a878, 0.42);
+  sun.position.set(18, 36, 14);
   scene.add(sun);
+  const sky = new THREE.Mesh(
+    new THREE.CylinderGeometry(70, 70, 36, 16, 1, true),
+    new THREE.MeshBasicMaterial({ map: skyTex, side: THREE.BackSide, fog: false })
+  );
+  sky.position.y = 10;
+  scene.add(sky);
 
   for (let r = 0; r < H; r++) {
     for (let c = 0; c < W; c++) {
@@ -1286,7 +1499,7 @@ function buildLevel() {
       let y0 = 0;
       if (ch === ",") y0 = -2.2;
       if (ch === "c") y0 = CAT_H;
-      const outdoor = ch === "~" || ch === "S" || ch === "t" || ch === "^" || ch === "T" || ch === "B";
+      const outdoor = r <= 5 && ch !== "#" && ch !== " ";
       const fl = new THREE.Mesh(new THREE.BoxGeometry(TILE, 0.22, TILE), outdoor ? mDirt : (ch === "c" ? mMetal : (ch === "," ? mDark : mFloor)));
       fl.position.set(x, y0 - 0.11, z);
       scene.add(fl);
@@ -1330,9 +1543,12 @@ function buildLevel() {
       if (ch === "G") makePickup(x, 0.6, z, "gold", mGold, "GOLD KEY");
       if (ch === "L") makePickup(x, -1.6, z, "silver", mSilver, "SILVER KEY");
       if (ch === "M") makePickup(x, 0.6, z, "mp40", new THREE.MeshLambertMaterial({ color: 0x2a2a22, flatShading: true }), "MP40");
+      if (ch === "Z") makePickup(x, 0.6, z, "bazooka", new THREE.MeshLambertMaterial({ color: 0x4a3a14, emissive: 0x221100, flatShading: true }), "BAZOOKA");
+      if (ch === "R") makePickup(x, 0.6, z, "heat", new THREE.MeshLambertMaterial({ color: 0x8a2010, emissive: 0x401000, flatShading: true }), "HEAT SEEKER");
+      if (ch === "U") makePickup(x, 0.6, z, "drunk", new THREE.MeshLambertMaterial({ color: 0x8a6a20, emissive: 0x332200, flatShading: true }), "DRUNK MISSILES");
       if (ch === "H") makePickup(x, ch === "," ? -1.6 : 0.6, z, "health", new THREE.MeshLambertMaterial({ color: 0x22aa40, emissive: 0x113311, flatShading: true }), "MONK MEAL");
       if (ch === "A") makePickup(x, 0.6, z, "ammo", new THREE.MeshLambertMaterial({ color: 0xc8a020, flatShading: true }), "AMMO");
-      if (ch === "N") makePickup(x, -1.6, z, "nade", new THREE.MeshLambertMaterial({ color: 0x884422, emissive: 0x331100, flatShading: true }), "FIREBOMBS");
+      if (ch === "N") makePickup(x, -1.6, z, "drunk", new THREE.MeshLambertMaterial({ color: 0x8a6a20, emissive: 0x332200, flatShading: true }), "DRUNK MISSILES");
       if (ch === "D" || ch === "g" || ch === "l" || ch === "Q") {
         const kind = ch === "g" ? "gold" : ch === "l" ? "silver" : ch === "Q" ? "timed" : "free";
         const dm = boxAt(x, 0, z, TILE * 0.92, WALL_H - 0.12, 0.32, kind === "gold" ? mGold : kind === "silver" ? mSilver : mMetal, true);
@@ -1363,6 +1579,11 @@ function buildLevel() {
     }
   }
 
+  for (const [c, r] of [[8, 3], [14, 4], [20, 2]]) {
+    if (cell(c, r) === "#") continue;
+    boxAt(worldX(c), 0, worldZ(r), 1.2, 1.15, 1.2, mat(crateTex), true);
+  }
+
   for (const [c, r] of [[18, 12], [10, 16], [22, 22]]) {
     const x = worldX(c), z = worldZ(r);
     const b = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 2.1), mBanner);
@@ -1370,18 +1591,17 @@ function buildLevel() {
     scene.add(b);
   }
 
-  const sc = MAP[1].indexOf("S");
-  const sx = worldX(sc), sz = worldZ(1);
+  const gadX = worldX(4), gadZ = worldZ(1);
   for (let i = 0; i < 5; i++) {
     const gad = new THREE.Mesh(new THREE.CylinderGeometry(1.08, 1.1, 0.14, 12), mat(gadTex, 0xffffff, 0x221100));
-    gad.position.set(sx, 7.4 - i * 1.45, sz + i * 0.08);
+    gad.position.set(gadX, 1.2 + i * 1.35, gadZ - 1.4);
     scene.add(gad);
   }
 
   const extraPads = [
-    [6, 4, 0], [8, 12, 0], [26, 12, 0], [8, 15, 0], [26, 15, 0],
+    [8, 12, 0], [26, 12, 0], [8, 15, 0], [26, 15, 0],
     [12, 21, 0], [22, 21, 0], [8, 28, -2.2], [16, 30, -2.2],
-    [10, 33, 0], [20, 35, 0], [4, 8, 0], [28, 24, 0], [1, 1, 0]
+    [10, 33, 0], [20, 35, 0], [4, 8, 0], [28, 24, 0]
   ];
   for (const [c, r, y] of extraPads) {
     if (c >= W || r >= H) continue;
@@ -1421,6 +1641,8 @@ function startGame() {
     b.dead = false; b.mesh.visible = true;
     if (b.solid) b.solid._open = false;
   }
+  for (const r of rockets) scene.remove(r.mesh);
+  rockets.length = 0;
   started = true;
   screen = "play";
   ui.classList.add("play");
@@ -1438,11 +1660,6 @@ function bind() {
       musicMuted = !musicMuted;
       if (musicMuted) window.pauseTitleMusic();
       else window.playTitleMusic();
-      return;
-    }
-    if (titleMusic && titleMusic.paused && !musicMuted) {
-      window.playTitleMusic();
-      musicBlocked = false;
       return;
     }
     if (screen === "title" || screen === "dead" || screen === "win" || screen === "secret") startGame();
@@ -1469,6 +1686,8 @@ function bind() {
     if (e.code === "Digit1" && have[0]) { wepI = 0; swapGun(); }
     if (e.code === "Digit2" && have[1]) { wepI = 1; swapGun(); }
     if (e.code === "Digit3" && have[2]) { wepI = 2; swapGun(); }
+    if (e.code === "Digit4" && have[3]) { wepI = 3; swapGun(); }
+    if (e.code === "Digit5" && have[4]) { wepI = 4; swapGun(); }
     if (e.code === "Escape") document.exitPointerLock();
   });
   document.addEventListener("keyup", (e) => { held[e.code] = false; });
@@ -1482,8 +1701,8 @@ function bind() {
   document.addEventListener("wheel", (e) => {
     if (!started) return;
     const dir = e.deltaY > 0 ? 1 : -1;
-    for (let i = 0; i < 3; i++) {
-      wepI = (wepI + dir + 3) % 3;
+    for (let i = 0; i < 5; i++) {
+      wepI = (wepI + dir + 5) % 5;
       if (have[wepI]) break;
     }
     swapGun();
@@ -1514,7 +1733,11 @@ function tick(dt) {
   const wishX = (ix / len) * cy + (iz / len) * sy;
   const wishZ = (iz / len) * cy - (ix / len) * sy;
   const moving = ix || iz;
-  if (moving) bob += dt * (running ? 17 : 11);
+  if (moving) {
+    bob += dt * (running ? 20 : 13);
+    stepT += dt * (running ? 5.2 : 3.4);
+    if (player.onGround && stepT > 1) { stepT = 0; SFX.step(); }
+  }
 
   if (k.Space && player.onGround) { player.vy = JUMP; player.onGround = false; SFX.jump(); }
   player.vy -= GRAV * dt;
@@ -1592,6 +1815,7 @@ function tick(dt) {
   if (mouseDown && currentWep().auto) fire();
 
   for (const e of enemies) updateEnemy(e, dt);
+  updateRockets(dt);
 
   for (let i = gibs.length - 1; i >= 0; i--) {
     const g = gibs[i];
@@ -1628,10 +1852,11 @@ function tick(dt) {
     muzzle.intensity *= 0.55;
     if (muzzle.intensity < 0.2) { muzzle.intensity = 0; muzzle.visible = false; }
   }
-  camera.position.set(player.x, player.y + PLAYER_H + Math.sin(bob) * 0.055 - landDip * 0.25, player.z);
+  camera.position.set(player.x, player.y + PLAYER_H + Math.sin(bob) * 0.1 - landDip * 0.28, player.z);
   camera.rotation.order = "YXZ";
   camera.rotation.y = player.yaw;
   camera.rotation.x = player.pitch + gunKick;
+  camera.rotation.z = moving ? -ix * 0.045 : camera.rotation.z * 0.8;
   if (gunRoot) {
     gunRoot.position.y = Math.sin(bob) * 0.018 - gunRecoil * 0.04;
     gunRoot.position.z = gunRecoil * 0.08;
@@ -1672,7 +1897,7 @@ function main() {
   renderer.domElement.style.imageRendering = "pixelated";
   document.body.insertBefore(renderer.domElement, ui);
   scene = new THREE.Scene();
-  camera = new THREE.PerspectiveCamera(FOV, VW / VH, 0.08, 90);
+  camera = new THREE.PerspectiveCamera(FOV, VW / VH, 0.08, 140);
   camera.rotation.order = "YXZ";
   scene.add(camera);
   clock = new THREE.Clock();
