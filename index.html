@@ -57,17 +57,17 @@ const MAP = [
   "#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~##",
   "#~~~~~~~S~^~~1~~~~~~~~~~~~~~~~~~~~##",
   "#~~~~~~~~~~~~H~~~~~~~~~~t~~R~~M~~~##",
-  "#~~~~~~~~~~~~~~~~~~~Z~~U~~~~~B~~~~##",
+  "#~~~~~~~~~~G~~~~~~~~Z~~U~~~~~B~~~~##",
   "#~~~~~~~~~~~~~~~~~~~~~T~~~~~~PQY.*##",
-  "###########D########################",
-  "#...........R.U.^..1..............##",
-  "#.........^^.........1............##",
+  "###########g########################",
+  "#............1.R.U.^..............##",
+  "#.........^^....1.................##",
   "#....A............................##",
   "##########D#########################",
   "#...............1.................##",
   "#..^........................^....c##",
   "#......1...........1.............c##",
-  "#................G...............c##",
+  "#................A...............c##",
   "#..^........................^.....##",
   "#............F.F.F................##",
   "#....1.................1..........##",
@@ -1471,6 +1471,30 @@ function makePickup(x, y, z, kind, material, label) {
   pickups.push({ x, y, z, kind, mesh, label, taken: false });
 }
 
+function makeGoldKey(x, y, z) {
+  const group = new THREE.Group();
+  const gold = new THREE.MeshBasicMaterial({ color: 0xffd040 });
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.22, 0.07, 6, 10), gold);
+  ring.rotation.x = Math.PI / 2;
+  const shaft = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.42), gold);
+  shaft.position.z = 0.28;
+  const bit = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.1, 0.12), gold);
+  bit.position.set(0.08, 0, 0.46);
+  group.add(ring, shaft, bit);
+  const pedestal = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.38, 0.46, 0.22, 8),
+    new THREE.MeshBasicMaterial({ color: 0x6a4010 })
+  );
+  pedestal.position.y = -0.42;
+  group.add(pedestal);
+  const glow = new THREE.PointLight(0xffc040, 1.15, 10, 1.4);
+  glow.position.y = 0.3;
+  group.add(glow);
+  group.position.set(x, y, z);
+  scene.add(group);
+  pickups.push({ x, y, z, kind: "gold", mesh: group, label: "GOLD KEY", taken: false });
+}
+
 function makeMonkMeal(x, y, z, yard) {
   const group = new THREE.Group();
   const loaf = new THREE.Mesh(
@@ -2021,26 +2045,32 @@ function addTracer(a, b) {
 function makeRocketMesh(kind) {
   const g = new THREE.Group();
   const fat = kind === "bazooka";
-  const bodyCol = kind === "drunk" ? 0xd88828 : kind === "heat" ? 0xc85018 : 0xd4b060;
+  const bodyCol = kind === "drunk" ? 0xffb030 : kind === "heat" ? 0xff4010 : 0xffd060;
   const body = new THREE.Mesh(
-    new THREE.CylinderGeometry(fat ? 0.12 : 0.08, fat ? 0.14 : 0.1, fat ? 0.72 : 0.55, 7),
-    metalMat(bodyCol)
+    new THREE.CylinderGeometry(fat ? 0.16 : 0.11, fat ? 0.18 : 0.13, fat ? 0.95 : 0.7, 7),
+    new THREE.MeshBasicMaterial({ color: bodyCol })
   );
   body.rotation.x = Math.PI / 2;
   const nose = new THREE.Mesh(
-    new THREE.ConeGeometry(fat ? 0.14 : 0.1, fat ? 0.24 : 0.18, 7),
-    metalMat(kind === "heat" ? 0xff4410 : 0xf0d878)
+    new THREE.ConeGeometry(fat ? 0.18 : 0.13, fat ? 0.32 : 0.24, 7),
+    new THREE.MeshBasicMaterial({ color: kind === "heat" ? 0xff2200 : 0xffee80 })
   );
   nose.rotation.x = Math.PI / 2;
-  nose.position.z = fat ? -0.46 : -0.36;
-  const fin = new THREE.Mesh(new THREE.BoxGeometry(fat ? 0.32 : 0.22, 0.04, 0.16), metalMat(0x8a6030));
-  fin.position.z = fat ? 0.28 : 0.2;
+  nose.position.z = fat ? -0.58 : -0.44;
+  const fin = new THREE.Mesh(new THREE.BoxGeometry(fat ? 0.42 : 0.3, 0.05, 0.2), new THREE.MeshBasicMaterial({ color: 0x8a5020 }));
+  fin.position.z = fat ? 0.34 : 0.24;
   const glow = new THREE.Mesh(
-    new THREE.SphereGeometry(fat ? 0.11 : 0.08, 6, 6),
-    new THREE.MeshBasicMaterial({ color: kind === "drunk" ? 0xff7722 : kind === "heat" ? 0xff3311 : 0xffaa44 })
+    new THREE.SphereGeometry(fat ? 0.16 : 0.12, 6, 6),
+    new THREE.MeshBasicMaterial({ color: kind === "drunk" ? 0xff7722 : kind === "heat" ? 0xff2200 : 0xffaa33 })
   );
-  glow.position.z = fat ? 0.4 : 0.3;
-  g.add(body, nose, fin, glow);
+  glow.position.z = fat ? 0.5 : 0.38;
+  const flame = new THREE.Mesh(
+    new THREE.ConeGeometry(fat ? 0.14 : 0.1, fat ? 0.36 : 0.26, 6),
+    new THREE.MeshBasicMaterial({ color: kind === "heat" ? 0xff4410 : 0xffcc44 })
+  );
+  flame.rotation.x = -Math.PI / 2;
+  flame.position.z = fat ? 0.68 : 0.52;
+  g.add(body, nose, fin, glow, flame);
   return g;
 }
 
@@ -2107,7 +2137,7 @@ function updateRockets(dt) {
       if (e) {
         const dx = e.x - r.x, dy = e.y + 1.05 - r.y, dz = e.z - r.z;
         const len = Math.hypot(dx, dy, dz) || 1;
-        const steer = 18 * dt;
+        const steer = 32 * dt;
         r.vx += (dx / len) * r.speed * steer;
         r.vy += (dy / len) * r.speed * steer;
         r.vz += (dz / len) * r.speed * steer;
@@ -2118,10 +2148,10 @@ function updateRockets(dt) {
       }
     }
     if (r.kind === "drunk") {
-      r.phase += dt * 16;
-      const wx = Math.sin(r.phase) * 12 + Math.sin(r.phase * 2.2) * 6;
-      const wy = Math.cos(r.phase * 0.73) * 4.8;
-      const wz = Math.cos(r.phase * 1.37) * 12 + Math.sin(r.phase * 0.55) * 5;
+      r.phase += dt * 20;
+      const wx = Math.sin(r.phase) * 16 + Math.sin(r.phase * 2.2) * 9;
+      const wy = Math.cos(r.phase * 0.73) * 6.2;
+      const wz = Math.cos(r.phase * 1.37) * 16 + Math.sin(r.phase * 0.55) * 7;
       r.x += (r.vx + wx) * dt;
       r.y += (r.vy + wy) * dt;
       r.z += (r.vz + wz) * dt;
@@ -2133,11 +2163,14 @@ function updateRockets(dt) {
     r.life -= dt;
     r.mesh.position.set(r.x, r.y, r.z);
     r.mesh.lookAt(r.x + r.vx, r.y + r.vy, r.z + r.vz);
-    if (Math.random() < 0.6) {
-      const spark = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, 0.06), new THREE.MeshBasicMaterial({ color: r.kind === "heat" ? 0xff3311 : 0xff7722 }));
+    if (Math.random() < 0.85) {
+      const spark = new THREE.Mesh(
+        new THREE.SphereGeometry(r.kind === "bazooka" ? 0.12 : 0.09, 5, 5),
+        new THREE.MeshBasicMaterial({ color: r.kind === "heat" ? 0xff2200 : r.kind === "drunk" ? 0xffaa33 : 0xff8822 })
+      );
       spark.position.set(r.x, r.y, r.z);
       scene.add(spark);
-      gibs.push({ mesh: spark, vx: 0, vy: 0.2, vz: 0, life: 0.12 });
+      gibs.push({ mesh: spark, vx: 0, vy: 0.15, vz: 0, life: 0.22 });
     }
     let hit = r.y < 0.12 || rocketHitSolid(r.x, r.y, r.z) || r.life <= 0;
     let victim = null;
@@ -2159,6 +2192,26 @@ function updateRockets(dt) {
 
 function explode(x, y, z, dmg, radius) {
   SFX.boom();
+  const flash = new THREE.PointLight(0xff8833, 5.2, 20, 1.1);
+  flash.position.set(x, y + 0.5, z);
+  scene.add(flash);
+  gibs.push({ mesh: flash, vx: 0, vy: 0, vz: 0, life: 0.22 });
+  for (let i = 0; i < 12; i++) {
+    const s = 0.4 + Math.random() * 0.85;
+    const ball = new THREE.Mesh(
+      new THREE.SphereGeometry(s, 6, 6),
+      new THREE.MeshBasicMaterial({ color: Math.random() > 0.45 ? 0xff6622 : 0xffdd44 })
+    );
+    ball.position.set(x, y + 0.2, z);
+    scene.add(ball);
+    gibs.push({
+      mesh: ball,
+      vx: (Math.random() - 0.5) * 9,
+      vy: 2 + Math.random() * 7,
+      vz: (Math.random() - 0.5) * 9,
+      life: 0.4 + Math.random() * 0.25
+    });
+  }
   spawnGibs(x, y, z, radius > 6 ? 32 : 22, 0x442200);
   dmg = dmg == null ? 95 : dmg;
   radius = radius == null ? 5.6 : radius;
@@ -2213,6 +2266,10 @@ function killEnemy(e, gibby) {
   const wall = nearestWallHit(e.x, 1.1, e.z);
   if (wall) addDecal(e.x, 1.1, e.z, wall, e.opener ? 2.4 : 1);
   e.group.visible = false;
+  if (e.opener) {
+    const key = pickups.find((p) => p.kind === "gold" && !p.taken);
+    if (key) signpostPad(key.x, key.z);
+  }
   if (performance.now() / 1000 > tauntT) {
     showMsg(TAUNTS[(Math.random() * TAUNTS.length) | 0], 800);
     tauntT = performance.now() / 1000 + 2.4;
@@ -2289,7 +2346,7 @@ function finishReload() {
 function use() {
   for (const d of doors) {
     if (d.open) continue;
-    if (Math.hypot(player.x - d.x, player.z - d.z) < 2.5) {
+    if (Math.hypot(player.x - d.x, player.z - d.z) < 3.1) {
       if (d.kind === "gold" && !keys.gold) { showMsg("NEED GOLD KEY"); return; }
       if (d.kind === "silver" && !keys.silver) { showMsg("NEED SILVER KEY"); return; }
       if (d.kind === "timed") { showMsg("LOCKED - WAIT 3:00"); return; }
@@ -2317,7 +2374,11 @@ function takePickup(p) {
   p.mesh.visible = false;
   SFX.pickup();
   showMsg(p.label, 700);
-  if (p.kind === "gold") keys.gold = true;
+  if (p.kind === "gold") {
+    keys.gold = true;
+    const door = doors.find((d) => d.kind === "gold" && !d.open);
+    if (door) signpostPad(door.x, door.z);
+  }
   if (p.kind === "silver") keys.silver = true;
   if (p.kind === "mp40") { have[1] = true; reserve[1] += 64; mag[1] = 32; wepI = 1; swapGun(); }
   if (p.kind === "bazooka") { have[2] = true; reserve[2] += 8; if (mag[2] === 0) mag[2] = 6; wepI = 2; swapGun(); }
@@ -2710,7 +2771,7 @@ function updateEnemy(e, dt) {
   if (invulnT > 0 || timeAlive < 3.2) return;
   if (nearSpawn(player.x, player.z)) return;
   if (inCourtyard(player.x, player.z) && !e.opener) return;
-  if (timeAlive < 40 && !e.opener) return;
+  if (inCourtyard(e.x, e.z) && !e.opener) return;
   const los = dist < 28 && hasLOS(e);
   if (los) e.state = dist < 11 ? "shoot" : "chase";
   else e.state = "idle";
@@ -2729,14 +2790,14 @@ function updateEnemy(e, dt) {
       if (e.opener && !playerCanSee(e)) {
         e.nextShot = 0.35;
       } else {
-        const chip = e.opener || timeAlive < 40;
-        e.nextShot = e.tough ? 0.55 : (chip ? 2.1 : 1.0);
+        const chip = !!e.opener;
+        e.nextShot = e.tough ? 0.55 : (chip ? 2.1 : 0.95);
         SFX.enemyShot();
         const origin = new THREE.Vector3(e.x, 1.3, e.z);
         const dest = new THREE.Vector3(player.x, player.y + 1.3, player.z);
         addTracer(origin, dest);
-        const acc = e.tough ? 0.7 : (chip ? 0.16 : 0.48);
-        const dmg = e.tough ? 11 : (chip ? 2 : 6);
+        const acc = e.tough ? 0.7 : (chip ? 0.16 : 0.5);
+        const dmg = e.tough ? 11 : (chip ? 2 : 7);
         if (Math.random() < acc) hurtPlayer(dmg, e.x, e.z);
       }
     }
@@ -2800,6 +2861,12 @@ function buildLevel() {
   const doorFill = new THREE.PointLight(0xffb060, 0.45, 12, 1.5);
   doorFill.position.set(worldX(11), 3.8, worldZ(7));
   scene.add(doorFill);
+  const hallFill = new THREE.PointLight(0xffb060, 0.7, 14, 1.4);
+  hallFill.position.set(worldX(13), 3.4, worldZ(9));
+  scene.add(hallFill);
+  const hallFill2 = new THREE.PointLight(0xff9040, 0.55, 12, 1.5);
+  hallFill2.position.set(worldX(16), 3.2, worldZ(10));
+  scene.add(hallFill2);
   for (const [c, r] of [[4, 2], [8, 1], [20, 1], [26, 2], [30, 3], [32, 6]]) {
     const torch = new THREE.PointLight(0xffa050, 0.55, 10, 1.6);
     torch.position.set(worldX(c), 3.4, worldZ(r));
@@ -2867,7 +2934,7 @@ function buildLevel() {
       }
       if (ch === "2") spawnEnemy(x, 0, z, true);
       if (ch === "B") spawnBarrel(x, z);
-      if (ch === "G") makePickup(x, 0.6, z, "gold", mGold, "GOLD KEY");
+      if (ch === "G") makeGoldKey(x, 0.85, z);
       if (ch === "L") makePickup(x, -1.6, z, "silver", mSilver, "SILVER KEY");
       if (ch === "M") makePickup(x, 0.6, z, "mp40", new THREE.MeshLambertMaterial({ color: 0x2a2a22, flatShading: true }), "MP40");
       if (ch === "Z") makePickup(x, 0.6, z, "bazooka", new THREE.MeshLambertMaterial({ color: 0x4a3a14, emissive: 0x221100, flatShading: true }), "BAZOOKA");
@@ -2878,9 +2945,20 @@ function buildLevel() {
       if (ch === "N") makePickup(x, -1.6, z, "drunk", new THREE.MeshLambertMaterial({ color: 0x8a6a20, emissive: 0x332200, flatShading: true }), "DRUNK MISSILES");
       if (ch === "D" || ch === "g" || ch === "l" || ch === "Q") {
         const kind = ch === "g" ? "gold" : ch === "l" ? "silver" : ch === "Q" ? "timed" : "free";
-        const dm = boxAt(x, 0, z, TILE * 0.92, WALL_H - 0.12, 0.32, kind === "gold" ? mGold : kind === "silver" ? mSilver : mMetal, true);
+        const doorMat = kind === "gold"
+          ? (r <= 8 ? new THREE.MeshBasicMaterial({ color: 0xffc030 }) : mGold)
+          : kind === "silver" ? mSilver : mMetal;
+        const dm = boxAt(x, 0, z, TILE * 0.92, WALL_H - 0.12, kind === "gold" && r <= 8 ? 0.42 : 0.32, doorMat, true);
         doors.push({ x, z, kind, mesh: dm, open: false, solid: solids[solids.length - 1] });
         if (kind === "timed") timedDoor = doors[doors.length - 1];
+        if (kind === "gold" && r <= 8) {
+          const tag = makeLabel("GOLD");
+          tag.position.set(x, 3.15, z - 0.4);
+          scene.add(tag);
+          const lit = new THREE.PointLight(0xffc040, 0.85, 11, 1.5);
+          lit.position.set(x, 3.2, z - 1.2);
+          scene.add(lit);
+        }
       }
       if (ch === "P") {
         const pw = boxAt(x, 0, z, TILE, WALL_H, TILE, mStone, true);
