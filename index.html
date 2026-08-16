@@ -408,9 +408,9 @@ function makeTextures() {
     const tile = (x >> 4) ^ (y >> 4);
     const n = (hash(x, y) * 22) | 0;
     const edge = (x & 15) < 1 || (y & 15) < 1;
-    if (edge) return [42, 26, 12];
-    const b = tile ? 78 : 62;
-    return [b + n, 46 + n * 0.3, 20];
+    if (edge) return [36, 28, 22];
+    const b = tile ? 68 : 54;
+    return [b + n, 48 + n * 0.35, 32 + n * 0.2];
   });
   metalTex = texNoise(64, (x, y) => {
     const n = (hash(x, y) * 14) | 0;
@@ -466,13 +466,15 @@ function makeTextures() {
   });
   skyTex = texNoise(64, (x, y) => {
     const t = y / 64;
-    const n = (hash(x >> 1, y >> 1) * 18) | 0;
-    const cloud = hash(x >> 2, (y >> 2) + 3) > 0.64 ? 28 : 0;
-    const hz = Math.exp(-Math.pow((t - 0.62) * 3.6, 2));
+    const star = hash(x, y) > 0.968 ? 200 : 0;
+    if (t < 0.42) return [6 + star, 8 + star, 22 + star];
+    if (t < 0.55) return [18 + star * 0.3, 14, 48];
+    const hz = Math.exp(-Math.pow((t - 0.7) * 7.2, 2));
+    const band = Math.exp(-Math.pow((t - 0.78) * 10, 2));
     return [
-      118 + t * 28 + hz * 22 + n + cloud,
-      72 + t * 16 + hz * 12 + cloud,
-      38 + t * 10 + hz * 4
+      12 + hz * 210 + band * 80,
+      8 + hz * 70 + band * 18,
+      28 + hz * 16
     ];
   });
 }
@@ -669,19 +671,22 @@ const SFX = {
   shoot() {
     initAudio();
     const d = gunDest();
-    blast(0.018, 2.1, 2600, "highpass", 0.7, d);
-    blast(0.08, 1.9, 1350, "bandpass", 1.05, d);
-    blast(0.24, 1.75, 460, "lowpass", 0.62, d);
-    blast(0.42, 0.9, 150, "lowpass", 0.5, d);
-    kick(50, 0.32, 1.9, d);
-    kick(24, 0.48, 1.3, d);
+    blast(0.01, 2.6, 4800, "highpass", 1.1, d);
+    blast(0.028, 2.3, 2400, "bandpass", 1.35, d);
+    blast(0.07, 2.0, 1400, "bandpass", 1.1, d);
+    blast(0.2, 1.85, 420, "lowpass", 0.7, d);
+    blast(0.38, 1.1, 140, "lowpass", 0.55, d);
+    kick(56, 0.28, 2.2, d);
+    kick(28, 0.42, 1.55, d);
+    playOsc(190, 0.04, "square", 0.12, 80);
   },
   mp40() {
     const d = gunDest();
-    blast(0.012, 1.4, 3000, "highpass", 0.8, d);
-    blast(0.048, 1.2, 1700, "bandpass", 1.25, d);
-    blast(0.1, 1.05, 640, "lowpass", 0.7, d);
-    kick(66, 0.11, 0.95, d);
+    blast(0.008, 1.85, 5200, "highpass", 1.15, d);
+    blast(0.022, 1.55, 2600, "bandpass", 1.4, d);
+    blast(0.055, 1.25, 900, "lowpass", 0.75, d);
+    kick(72, 0.09, 1.15, d);
+    playOsc(240, 0.02, "square", 0.08, 90);
   },
   bazooka() {
     const d = gunDest();
@@ -1640,43 +1645,66 @@ function nearSpawn(x, z) {
   return Math.hypot(x - worldX(s.c), z - worldZ(s.r)) < TILE * 4.5;
 }
 
+function colMat(c) {
+  return new THREE.MeshBasicMaterial({ color: c });
+}
+
 function spawnEnemy(x, y, z, tough) {
   const s = findCell("S");
   if (Math.hypot(x - worldX(s.c), z - worldZ(s.r)) < TILE * 3.2) return;
   const g = new THREE.Group();
-  const cloth = tough ? 0x2a2a28 : 0xb88850;
-  const pants = tough ? 0x1a1a18 : 0x6a4a28;
-  const skin = tough ? 0xc4a07a : 0xe0b888;
-  const bodyMat = new THREE.MeshLambertMaterial({ color: cloth, emissive: 0x2a1808, flatShading: true });
-  const pantMat = new THREE.MeshLambertMaterial({ color: pants, emissive: 0x1a1008, flatShading: true });
-  const headMat = new THREE.MeshLambertMaterial({ color: skin, emissive: 0x3a2010, flatShading: true });
-  const hairMat = new THREE.MeshLambertMaterial({ color: tough ? 0x222220 : 0x2a1a10, flatShading: true });
-  const body = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.72, 0.3), bodyMat);
-  body.position.y = 1.02;
-  const pelvis = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.22, 0.28), pantMat);
-  pelvis.position.y = 0.62;
-  const head = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.3, 0.3), headMat);
-  head.position.y = 1.52;
-  const hair = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.1, 0.32), hairMat);
-  hair.position.y = 1.68;
-  const armL = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.55, 0.14), bodyMat);
+  const vest = tough ? 0x3a3c34 : 0x5a7840;
+  const pants = tough ? 0x242820 : 0x3a4c32;
+  const skin = 0xf0c090;
+  const helm = tough ? 0x2a2c28 : 0x3a4a3c;
+  const boot = 0x1a1410;
+  const body = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.54, 0.3), colMat(vest));
+  body.position.y = 1.22;
+  const pelvis = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.2, 0.28), colMat(pants));
+  pelvis.position.y = 0.86;
+  const belt = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.08, 0.3), colMat(0x2a2014));
+  belt.position.y = 0.98;
+  const head = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.28, 0.24), colMat(skin));
+  head.position.set(0, 1.68, 0.02);
+  const helmet = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.14, 0.3), colMat(helm));
+  helmet.position.set(0, 1.86, 0);
+  const brim = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.04, 0.12), colMat(helm));
+  brim.position.set(0, 1.78, 0.16);
+  const eyeL = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.04, 0.04), colMat(0x101008));
+  const eyeR = eyeL.clone();
+  eyeL.position.set(-0.06, 1.7, 0.14);
+  eyeR.position.set(0.06, 1.7, 0.14);
+  const strap = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.5, 0.32), colMat(0x3a2818));
+  strap.position.set(-0.16, 1.22, 0);
+  const armL = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.34, 0.14), colMat(vest));
   const armR = armL.clone();
-  armL.position.set(-0.34, 0.95, 0);
-  armR.position.set(0.34, 0.95, 0.08);
-  const gun = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 0.36), new THREE.MeshLambertMaterial({ color: 0x222218, flatShading: true }));
-  gun.position.set(0.34, 0.82, 0.28);
-  const legL = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.52, 0.18), pantMat);
+  armL.position.set(-0.36, 1.2, 0);
+  armR.position.set(0.36, 1.16, 0.06);
+  const handL = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), colMat(skin));
+  const handR = handL.clone();
+  handL.position.set(-0.36, 0.98, 0.04);
+  handR.position.set(0.38, 0.84, 0.2);
+  const gun = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 0.46), colMat(0x2a2a20));
+  gun.position.set(0.38, 0.86, 0.42);
+  const mag = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.18, 0.07), colMat(0x1a1a14));
+  mag.position.set(0.38, 0.74, 0.28);
+  const bootL = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.12, 0.26), colMat(boot));
+  const bootR = bootL.clone();
+  bootL.position.set(-0.12, 0.06, 0.04);
+  bootR.position.set(0.12, 0.06, 0.04);
+  const legL = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.7, 0.18), colMat(pants));
   const legR = legL.clone();
-  legL.position.set(-0.13, 0.26, 0);
-  legR.position.set(0.13, 0.26, 0);
+  legL.position.set(-0.12, 0.44, 0);
+  legR.position.set(0.12, 0.44, 0);
   const hit = new THREE.Mesh(
-    new THREE.BoxGeometry(0.9, 1.72, 0.58),
+    new THREE.BoxGeometry(0.95, 1.9, 0.62),
     new THREE.MeshBasicMaterial({ visible: false })
   );
   hit.name = "hit";
-  hit.position.y = 0.86;
-  g.add(body, pelvis, head, hair, armL, armR, gun, legL, legR, hit);
+  hit.position.y = 0.95;
+  g.add(body, pelvis, belt, head, helmet, brim, eyeL, eyeR, strap, armL, armR, handL, handR, gun, mag, bootL, bootR, legL, legR, hit);
   g.position.set(x, y, z);
+  g.scale.set(1.12, 1.12, 1.12);
   scene.add(g);
   enemies.push({
     group: g, body, head, x, y, z, vx: 0, vz: 0,
@@ -1708,36 +1736,61 @@ function spawnBarrel(x, z) {
   barrels.push({ x, z, mesh: m, solid: solids[solids.length - 1], dead: false });
 }
 
+function tossGib(mesh, x, y, z, vx, vy, vz, life) {
+  mesh.position.set(x, y, z);
+  scene.add(mesh);
+  gibs.push({ mesh, vx, vy, vz, life });
+}
+
 function spawnGibs(x, y, z, n, color) {
   SFX.gib();
-  for (let i = 0; i < n; i++) {
-    const s = 0.2 + Math.random() * 0.5;
-    const m = new THREE.Mesh(
-      new THREE.BoxGeometry(s, s * (0.55 + Math.random()), s),
-      new THREE.MeshBasicMaterial({ color: color || (Math.random() > 0.22 ? 0xc81810 : 0xc4a060) })
+  const parts = [
+    [new THREE.BoxGeometry(0.32, 0.16, 0.3), 0x3a4a3c],
+    [new THREE.BoxGeometry(0.26, 0.28, 0.24), 0xf0c090],
+    [new THREE.BoxGeometry(0.48, 0.4, 0.28), 0x5a7840],
+    [new THREE.BoxGeometry(0.14, 0.36, 0.14), 0x5a7840],
+    [new THREE.BoxGeometry(0.14, 0.36, 0.14), 0x5a7840],
+    [new THREE.BoxGeometry(0.16, 0.42, 0.18), 0x3a4c32],
+    [new THREE.BoxGeometry(0.16, 0.42, 0.18), 0x3a4c32],
+    [new THREE.BoxGeometry(0.16, 0.12, 0.26), 0x1a1410],
+    [new THREE.BoxGeometry(0.16, 0.12, 0.26), 0x1a1410],
+    [new THREE.BoxGeometry(0.08, 0.08, 0.4), 0x2a2a20]
+  ];
+  for (let i = 0; i < parts.length; i++) {
+    const m = new THREE.Mesh(parts[i][0], new THREE.MeshBasicMaterial({ color: color || parts[i][1] }));
+    tossGib(
+      m,
+      x + (Math.random() - 0.5) * 0.5,
+      y + 0.3 + Math.random() * 1.1,
+      z + (Math.random() - 0.5) * 0.5,
+      (Math.random() - 0.5) * 8,
+      4 + Math.random() * 7,
+      (Math.random() - 0.5) * 8,
+      3.6 + Math.random()
     );
-    m.position.set(x + (Math.random() - 0.5) * 0.7, y + Math.random() * 1.1, z + (Math.random() - 0.5) * 0.7);
-    scene.add(m);
-    gibs.push({
-      mesh: m,
-      vx: (Math.random() - 0.5) * 14,
-      vy: 6 + Math.random() * 10,
-      vz: (Math.random() - 0.5) * 14,
-      life: 3.2 + Math.random()
-    });
   }
-  for (let i = 0; i < 22; i++) {
-    const p = new THREE.Mesh(new THREE.SphereGeometry(0.07, 5, 5), new THREE.MeshBasicMaterial({ color: 0x8a0000 }));
-    p.position.set(x, y + 1, z);
-    scene.add(p);
-    gibs.push({
-      mesh: p,
-      vx: (Math.random() - 0.5) * 10,
-      vy: 3 + Math.random() * 7,
-      vz: (Math.random() - 0.5) * 10,
-      life: 1.4,
-      decal: true
-    });
+  const extra = Math.max(8, (n || 16) - parts.length);
+  for (let i = 0; i < extra; i++) {
+    const s = 0.22 + Math.random() * 0.55;
+    const m = new THREE.Mesh(
+      new THREE.BoxGeometry(s, s * (0.45 + Math.random() * 0.7), s),
+      new THREE.MeshBasicMaterial({ color: color || (Math.random() > 0.28 ? 0xd01810 : 0xe8b070) })
+    );
+    tossGib(
+      m,
+      x + (Math.random() - 0.5) * 0.8,
+      y + Math.random() * 1.2,
+      z + (Math.random() - 0.5) * 0.8,
+      (Math.random() - 0.5) * 12,
+      5 + Math.random() * 9,
+      (Math.random() - 0.5) * 12,
+      3.2 + Math.random()
+    );
+  }
+  for (let i = 0; i < 18; i++) {
+    const p = new THREE.Mesh(new THREE.SphereGeometry(0.09, 5, 5), new THREE.MeshBasicMaterial({ color: 0x8a0000 }));
+    tossGib(p, x, y + 1, z, (Math.random() - 0.5) * 9, 3 + Math.random() * 6, (Math.random() - 0.5) * 9, 1.6);
+    gibs[gibs.length - 1].decal = true;
   }
 }
 
@@ -1883,12 +1936,13 @@ function addPart(parent, geo, mat, x, y, z, rx, ry, rz) {
 function buildPistol(name, x, y, z, yaw) {
   const p = new THREE.Group();
   p.name = name;
-  addPart(p, new THREE.BoxGeometry(0.055, 0.12, 0.06), metalMat(0x8a4a1c), 0, -0.07, 0.05, 0.38);
-  addPart(p, new THREE.BoxGeometry(0.065, 0.07, 0.17), metalMat(0xb8b898), 0, 0, -0.01);
-  addPart(p, new THREE.BoxGeometry(0.055, 0.04, 0.15), metalMat(0xd8d8b8), 0, 0.04, -0.02);
-  addPart(p, new THREE.BoxGeometry(0.028, 0.028, 0.14), metalMat(0xc8c8a8), 0, 0, -0.14);
-  addPart(p, new THREE.BoxGeometry(0.016, 0.03, 0.022), metalMat(0x9a9a80), 0, -0.045, 0.02);
-  addPart(p, new THREE.BoxGeometry(0.022, 0.016, 0.045), metalMat(0x333328), 0, 0.055, -0.11);
+  addPart(p, new THREE.BoxGeometry(0.07, 0.14, 0.07), metalMat(0xa05018), 0, -0.08, 0.06, 0.38);
+  addPart(p, new THREE.BoxGeometry(0.08, 0.08, 0.2), metalMat(0xe0e0c0), 0, 0, -0.02);
+  addPart(p, new THREE.BoxGeometry(0.065, 0.05, 0.18), metalMat(0xf0f0d0), 0, 0.045, -0.03);
+  addPart(p, new THREE.BoxGeometry(0.034, 0.034, 0.18), metalMat(0xd8d8b8), 0, 0, -0.18);
+  addPart(p, new THREE.BoxGeometry(0.02, 0.036, 0.026), metalMat(0xb0b090), 0, -0.05, 0.02);
+  addPart(p, new THREE.BoxGeometry(0.028, 0.02, 0.055), metalMat(0x444438), 0, 0.06, -0.13);
+  addPart(p, new THREE.BoxGeometry(0.09, 0.1, 0.1), new THREE.MeshBasicMaterial({ color: 0xe8b080 }), 0.01, -0.14, 0.1);
   p.position.set(x, y, z);
   p.rotation.y = yaw || 0;
   return p;
@@ -1937,19 +1991,20 @@ function buildGun(id) {
 
 function setupGun() {
   gunRoot = new THREE.Group();
-  gunRoot.scale.set(1, 1, 1);
+  gunRoot.scale.set(1.7, 1.7, 1.7);
+  gunRoot.position.set(0.05, -0.12, 0.14);
   camera.add(gunRoot);
   muzzle = new THREE.PointLight(0xffaa55, 0, 4);
-  muzzle.position.set(0.12, -0.28, -0.7);
+  muzzle.position.set(0.16, -0.32, -0.62);
   camera.add(muzzle);
-  gunLight = new THREE.PointLight(0xffcc88, 0.55, 2.2);
-  gunLight.position.set(0.08, -0.22, -0.35);
+  gunLight = new THREE.PointLight(0xffcc88, 0.85, 2.6);
+  gunLight.position.set(0.1, -0.2, -0.28);
   camera.add(gunLight);
   gunFlash = new THREE.Mesh(
-    new THREE.PlaneGeometry(0.1, 0.1),
+    new THREE.PlaneGeometry(0.22, 0.22),
     new THREE.MeshBasicMaterial({ map: flashTex, transparent: true, depthWrite: false, side: THREE.DoubleSide })
   );
-  gunFlash.position.set(0.12, -0.3, -0.68);
+  gunFlash.position.set(0.16, -0.34, -0.6);
   gunFlash.visible = false;
   camera.add(gunFlash);
   swapGun();
@@ -2701,6 +2756,22 @@ function bounceOff(p) {
   p.cool = 0.7;
   p.flash = 1;
   SFX.pad();
+  for (let i = 0; i < 18; i++) {
+    const m = new THREE.Mesh(
+      new THREE.BoxGeometry(0.16 + Math.random() * 0.2, 0.06, 0.16),
+      new THREE.MeshBasicMaterial({ color: i & 1 ? 0xffe060 : 0xffa020 })
+    );
+    tossGib(
+      m,
+      p.x + (Math.random() - 0.5) * 1.2,
+      0.35,
+      p.z + (Math.random() - 0.5) * 1.2,
+      (Math.random() - 0.5) * 5,
+      10 + Math.random() * 10,
+      (Math.random() - 0.5) * 5,
+      0.85
+    );
+  }
   if (window.console) {
     console.log("[ROTT] BOUNCE vy=" + player.vy.toFixed(1) + " at", player.x.toFixed(2), player.z.toFixed(2), "disk", p.x.toFixed(2), p.z.toFixed(2));
   }
@@ -2990,14 +3061,17 @@ function buildLevel() {
   const mTree = new THREE.MeshLambertMaterial({ color: 0x7aaa38, emissive: 0x3a5810, flatShading: true });
   const mExit = new THREE.MeshLambertMaterial({ color: 0x28d050, emissive: 0x0a4018, flatShading: true });
 
-  scene.background = new THREE.Color(0x3a1c0c);
-  scene.fog = new THREE.Fog(0x4a2814, 110, 220);
-  scene.add(new THREE.AmbientLight(0x8a6a48, 0.32));
-  scene.add(new THREE.HemisphereLight(0xc8a878, 0x2a180c, 0.22));
-  const sun = new THREE.DirectionalLight(0xffd8a8, 0.72);
-  sun.position.set(48, 72, 12);
+  scene.background = new THREE.Color(0x0a0818);
+  scene.fog = new THREE.Fog(0x1a1830, 50, 200);
+  scene.add(new THREE.AmbientLight(0x3a4468, 0.28));
+  scene.add(new THREE.HemisphereLight(0x4a60a0, 0x1a1008, 0.32));
+  const moonLit = new THREE.DirectionalLight(0xc8d4ff, 0.42);
+  moonLit.position.set(-20, 80, -30);
+  scene.add(moonLit);
+  const sun = new THREE.DirectionalLight(0xffc070, 0.58);
+  sun.position.set(48, 36, 8);
   scene.add(sun);
-  const fill = new THREE.DirectionalLight(0xc89060, 0.1);
+  const fill = new THREE.DirectionalLight(0x6080c0, 0.16);
   fill.position.set(-24, 40, -16);
   scene.add(fill);
   const sky = new THREE.Mesh(
@@ -3006,8 +3080,14 @@ function buildLevel() {
   );
   sky.position.y = 12;
   scene.add(sky);
+  const moon = new THREE.Mesh(
+    new THREE.SphereGeometry(7.2, 12, 12),
+    new THREE.MeshBasicMaterial({ color: 0xffe8b8, fog: false })
+  );
+  moon.position.set(78, 36, 10);
+  scene.add(moon);
   const yard = findCell("S");
-  const spawnFill = new THREE.PointLight(0xffc070, 0.35, 12, 1.6);
+  const spawnFill = new THREE.PointLight(0xffc040, 0.85, 16, 1.4);
   spawnFill.position.set(worldX(yard.c + 2), 4.2, worldZ(yard.r));
   scene.add(spawnFill);
   const fx = worldX(yard.c + 12), fz = worldZ(Math.max(1, yard.r - 2));
@@ -3591,10 +3671,10 @@ function tick(dt) {
       scene.fog.color.setHex(0x8a6840);
       scene.background.setHex(0x5a4024);
     } else {
-      scene.fog.near = 110;
-      scene.fog.far = 220;
-      scene.fog.color.setHex(0x4a2814);
-      scene.background.setHex(0x3a1c0c);
+      scene.fog.near = 50;
+      scene.fog.far = 200;
+      scene.fog.color.setHex(0x1a1830);
+      scene.background.setHex(0x0a0818);
     }
   }
   if (lookFreeze > 0) {
@@ -3804,9 +3884,9 @@ function tick(dt) {
   camera.rotation.x = player.pitch + gunKick + viewPunch * 0.35 + Math.sin(bob * 2) * (moving && !airAmt ? 0.035 : 0);
   camera.rotation.z = (moving ? -ix * 0.07 : camera.rotation.z * 0.8) + viewPunch * 0.14;
   if (gunRoot) {
-    gunRoot.position.y = -0.08 + Math.sin(bob) * 0.02 - gunRecoil * 0.04;
-    gunRoot.position.x = Math.cos(bob) * 0.012;
-    gunRoot.position.z = gunRecoil * 0.08;
+    gunRoot.position.y = -0.12 + Math.sin(bob) * 0.02 - gunRecoil * 0.04;
+    gunRoot.position.x = 0.05 + Math.cos(bob) * 0.012;
+    gunRoot.position.z = 0.14 + gunRecoil * 0.08;
     gunRoot.rotation.x = gunRecoil * 0.18;
     const left = gunRoot.getObjectByName("leftPistol");
     const right = gunRoot.getObjectByName("rightPistol");
@@ -3880,8 +3960,8 @@ function main() {
       "void main(){",
       "  vec4 c = texture2D(tDiffuse, vUv);",
       "  float bayer = fract(sin(dot(gl_FragCoord.xy, vec2(12.9898,78.233))) * 43758.5453);",
-      "  c.rgb = c.rgb * 0.82;",
-      "  c.rgb = floor(c.rgb * 22.0 + bayer * 0.4) / 22.0;",
+      "  c.rgb = c.rgb * 1.12;",
+      "  c.rgb = floor(c.rgb * 28.0 + bayer * 0.35) / 28.0;",
       "  float scan = 0.97 + 0.03 * step(0.5, fract(gl_FragCoord.y * 0.5));",
       "  c.rgb *= scan;",
       "  gl_FragColor = c;",
