@@ -25,7 +25,7 @@ Or open `index.html` directly. A local server is safer for the audio file.
 
 ## Level flow (shareware E1A1 shape)
 
-1. Spawn on courtyard dirt facing open yard. First grunt is behind cover, not on the sightline.
+1. Spawn on courtyard dirt, looking east down the yard. No pad underfoot. Tree and a guard are ahead. Door is in the south wall.
 2. Main door in the south wall into the hall, then the hub
 3. Bounce pads later, up to the east catwalk for the gold key
 4. Gold door north into the jagged / pillar wing

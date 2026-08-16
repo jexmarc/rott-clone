@@ -51,9 +51,11 @@ const UH = 200;
 const MAP = [
   "####################################",
   "#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~##",
-  "#~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~##",
-  "#~~~S~~~~~~~~~~~1~~~~~t~~~~~~M~~~~##",
-  "#~~~~~~~~~Z~~~########~~~~~~~~B~~~##",
+  "#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~##",
+  "#~~~~S~~~~~~~~~~~~~~~~~~~~~~~~~~~~##",
+  "#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~##",
+  "#~~~~~~~~~~~~~~1~~~~~~~~t~~~~~M~~~##",
+  "#~~~~~~~~~Z~~~~~~~~~~~~~~~~~~B~~~~##",
   "#~~~~~~~~~~~~~~~~~~~~~T~~~~~~PQY.*##",
   "###########D########################",
   "#....1..R.U.^.....................##",
@@ -177,7 +179,8 @@ let lightning = 0;
 let faceHurt = 0;
 let landDip = 0;
 let wasOnGround = false;
-const keysDown = Object.create(null);  /* never replace this object; resetPlayer replaces player */
+const keysDown = Object.create(null);
+const held = keysDown;
 function clearKeys() {
   for (const key of Object.keys(keysDown)) delete keysDown[key];
 }
@@ -807,10 +810,13 @@ function paintHUD(g) {
   const m = timeAlive / 60 | 0;
   const s = (timeAlive | 0) % 60;
   drawText(g, m + ":" + (s < 10 ? "0" : "") + s, 210, 184, "#a08050", 1);
-  g.fillStyle = "#d8d0c0";
-  g.fillRect(159, 84, 2, 2);
-  g.fillRect(157, 86, 6, 1);
-  g.fillRect(159, 85, 2, 4);
+  g.fillStyle = "#fff4c8";
+  g.fillRect(158, 82, 4, 4);
+  g.fillRect(154, 86, 12, 2);
+  g.fillRect(158, 84, 4, 8);
+  g.fillStyle = "#201008";
+  g.fillRect(159, 85, 2, 6);
+  g.fillRect(156, 87, 8, 1);
 
   const mx = 252, my = 8, mw = 64, mh = 52;
   g.fillStyle = "rgba(8,4,4,0.7)";
@@ -962,7 +968,7 @@ function makeLabel(text) {
 
 function placePad(x, y, z) {
   const s = findCell("S");
-  if (Math.hypot(x - worldX(s.c), z - worldZ(s.r)) < TILE * 2.4) return;
+  if (Math.hypot(x - worldX(s.c), z - worldZ(s.r)) < TILE * 8) return;
   const group = new THREE.Group();
   const base = new THREE.Mesh(new THREE.CylinderGeometry(1.12, 1.18, 0.16, 12), mat(metalTex, 0x665544));
   const disk = new THREE.Mesh(new THREE.CylinderGeometry(1.05, 1.08, 0.1, 12), mat(padTex, 0xffffff, 0x221100));
@@ -1570,22 +1576,20 @@ function findCell(ch) {
     const c = MAP[r].indexOf(ch);
     if (c >= 0) return { c, r };
   }
-  return { c: 4, r: 3 };
+  return { c: 5, r: 3 };
 }
 
 function resetPlayer() {
   const s = findCell("S");
-  const lookX = worldX(s.c + 10);
-  const lookZ = worldZ(s.r);
   const px = worldX(s.c);
   const pz = worldZ(s.r);
   player = {
     x: px, y: 0, z: pz,
-    yaw: Math.atan2(-(lookX - px), -(lookZ - pz)),
-    pitch: 0.08,
+    yaw: -Math.PI / 2,
+    pitch: 0.14,
     vx: 0, vy: 0, vz: 0,
     onGround: true, hp: 100, armor: 0,
-    _k: keysDown
+    _k: held
   };
   keys.gold = keys.silver = false;
   wepI = 0;
@@ -1718,7 +1722,7 @@ function buildLevel() {
       let y0 = 0;
       if (ch === ",") y0 = -2.2;
       if (ch === "c") y0 = CAT_H;
-      const outdoor = r <= 5 && ch !== "#" && ch !== " " && ch !== ".";
+      const outdoor = r <= 7 && ch !== "#" && ch !== " " && ch !== ".";
       const fl = new THREE.Mesh(new THREE.BoxGeometry(TILE, 0.22, TILE), outdoor ? mDirt : (ch === "c" ? mMetal : (ch === "," ? mDark : mFloor)));
       fl.position.set(x, y0 - 0.11, z);
       scene.add(fl);
@@ -1803,7 +1807,7 @@ function buildLevel() {
     boxAt(worldX(c), 0, worldZ(r), 1.2, 1.15, 1.2, mat(crateTex), true);
   }
 
-  for (const [c, r] of [[18, 12], [10, 16], [22, 22]]) {
+  for (const [c, r] of [[18, 14], [10, 18], [22, 24]]) {
     const x = worldX(c), z = worldZ(r);
     const b = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 2.1), mBanner);
     b.position.set(x, 2.4, z + 1.52);
@@ -1819,9 +1823,9 @@ function buildLevel() {
   }
 
   const extraPads = [
-    [8, 12, 0], [26, 12, 0], [8, 15, 0], [26, 15, 0],
-    [12, 21, 0], [22, 21, 0], [8, 28, -2.2], [16, 30, -2.2],
-    [10, 33, 0], [20, 35, 0], [4, 8, 0], [28, 24, 0]
+    [8, 14, 0], [26, 14, 0], [8, 17, 0], [26, 17, 0],
+    [12, 23, 0], [22, 23, 0], [8, 30, -2.2], [16, 32, -2.2],
+    [10, 35, 0], [20, 37, 0], [28, 26, 0]
   ];
   for (const [c, r, y] of extraPads) {
     if (c >= W || r >= H) continue;
@@ -2033,7 +2037,7 @@ function tick(dt) {
   if (faceHurt > 0) faceHurt -= dt;
   if (landDip > 0) landDip -= dt * 4;
 
-  const k = keysDown;
+  const k = held;
   let ix = 0, iz = 0;
   if (k.KeyW || k.ArrowUp) iz -= 1;
   if (k.KeyS || k.ArrowDown) iz += 1;
@@ -2047,7 +2051,7 @@ function tick(dt) {
   const wishZ = (iz / len) * cy - (ix / len) * sy;
   const moving = ix || iz;
   if (moving) {
-    bob += dt * (running ? 20 : 13);
+    bob += dt * (running ? 26 : 17);
     stepT += dt * (running ? 5.2 : 3.4);
     if (player.onGround && stepT > 0.72) { stepT = 0; SFX.step(); }
   }
@@ -2165,13 +2169,14 @@ function tick(dt) {
     muzzle.intensity *= 0.55;
     if (muzzle.intensity < 0.2) { muzzle.intensity = 0; muzzle.visible = false; }
   }
-  camera.position.set(player.x, player.y + PLAYER_H + Math.sin(bob) * 0.1 - landDip * 0.28, player.z);
+  camera.position.set(player.x, player.y + PLAYER_H + Math.sin(bob) * 0.22 - landDip * 0.28, player.z);
   camera.rotation.order = "YXZ";
   camera.rotation.y = player.yaw;
-  camera.rotation.x = player.pitch + gunKick;
-  camera.rotation.z = moving ? -ix * 0.045 : camera.rotation.z * 0.8;
+  camera.rotation.x = player.pitch + gunKick + Math.sin(bob * 2) * (moving ? 0.035 : 0);
+  camera.rotation.z = moving ? -ix * 0.07 : camera.rotation.z * 0.8;
   if (gunRoot) {
-    gunRoot.position.y = Math.sin(bob) * 0.018 - gunRecoil * 0.04;
+    gunRoot.position.y = Math.sin(bob) * 0.045 - gunRecoil * 0.04;
+    gunRoot.position.x = Math.cos(bob) * 0.02;
     gunRoot.position.z = gunRecoil * 0.08;
     gunRoot.rotation.x = gunRecoil * 0.18;
   }
