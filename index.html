@@ -53,9 +53,9 @@ const MAP = [
   "#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~##",
   "#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~##",
   "#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~##",
-  "#~~~~~~~S~~^~~~1~~~~~~~~~~~~~~~~~~##",
+  "#~~~~~~~S~~~~~~1~~~~~~~~~~~~~~~~~~##",
   "#~~~~~~~~~~~~~1~H~~~~~~~t~~R~~M~~~##",
-  "#~~~~~~~~~Z~~~~~~~~~~U~~~~~~~B~~~~##",
+  "#~~~~~~~~~Z~~~^~~~~~~U~~~~~~~B~~~~##",
   "#~~~~~~~~~~~~~~~~~~~~~T~~~~~~PQY.*##",
   "###########D########################",
   "#...........R.U.^..1..............##",
@@ -1477,9 +1477,11 @@ function makeLabel(text) {
   return new THREE.Mesh(new THREE.PlaneGeometry(2.2, 0.55), new THREE.MeshBasicMaterial({ map: t }));
 }
 
-function placePad(x, y, z, yard) {
+function placePad(x, y, z, yard, force) {
   const s = findCell("S");
-  if (Math.hypot(x - worldX(s.c), z - worldZ(s.r)) < TILE * 2.2) return;
+  const dist = Math.hypot(x - worldX(s.c), z - worldZ(s.r));
+  if (dist < TILE * 1.05) return;
+  if (!force && dist < TILE * 2.2) return;
   const group = new THREE.Group();
   const rad = yard ? 1.48 : 1.12;
   const base = new THREE.Mesh(new THREE.CylinderGeometry(rad, rad + 0.06, yard ? 0.22 : 0.16, 12), mat(metalTex, 0x665544));
@@ -1551,12 +1553,18 @@ function spawnEnemy(x, y, z, tough) {
   const legR = legL.clone();
   legL.position.set(-0.13, 0.26, 0);
   legR.position.set(0.13, 0.26, 0);
-  g.add(body, pelvis, head, hair, armL, armR, gun, legL, legR);
+  const hit = new THREE.Mesh(
+    new THREE.BoxGeometry(0.9, 1.72, 0.58),
+    new THREE.MeshBasicMaterial({ visible: false })
+  );
+  hit.name = "hit";
+  hit.position.y = 0.86;
+  g.add(body, pelvis, head, hair, armL, armR, gun, legL, legR, hit);
   g.position.set(x, y, z);
   scene.add(g);
   enemies.push({
     group: g, body, head, x, y, z, vx: 0, vz: 0,
-    hp: tough ? 150 : 72, max: tough ? 150 : 72, tough,
+    hp: tough ? 150 : 42, max: tough ? 150 : 42, tough,
     opener: false,
     state: "idle", nextShot: 1.35 + Math.random(), dead: false, hurt: 0
   });
@@ -1570,31 +1578,31 @@ function spawnBarrel(x, z) {
 function spawnGibs(x, y, z, n, color) {
   SFX.gib();
   for (let i = 0; i < n; i++) {
-    const s = 0.1 + Math.random() * 0.28;
+    const s = 0.16 + Math.random() * 0.42;
     const m = new THREE.Mesh(
-      new THREE.BoxGeometry(s, s * (0.5 + Math.random()), s),
-      new THREE.MeshLambertMaterial({ color: color || (Math.random() > 0.25 ? 0x7a1410 : 0x8a6a40), flatShading: true })
+      new THREE.BoxGeometry(s, s * (0.55 + Math.random()), s),
+      new THREE.MeshBasicMaterial({ color: color || (Math.random() > 0.22 ? 0xc81810 : 0xc4a060) })
     );
-    m.position.set(x + (Math.random() - 0.5) * 0.5, y + Math.random() * 0.9, z + (Math.random() - 0.5) * 0.5);
+    m.position.set(x + (Math.random() - 0.5) * 0.7, y + Math.random() * 1.1, z + (Math.random() - 0.5) * 0.7);
     scene.add(m);
     gibs.push({
       mesh: m,
-      vx: (Math.random() - 0.5) * 10,
-      vy: 5 + Math.random() * 8,
-      vz: (Math.random() - 0.5) * 10,
-      life: 2.4 + Math.random()
+      vx: (Math.random() - 0.5) * 14,
+      vy: 6 + Math.random() * 10,
+      vz: (Math.random() - 0.5) * 14,
+      life: 3.2 + Math.random()
     });
   }
-  for (let i = 0; i < 14; i++) {
-    const p = new THREE.Mesh(new THREE.SphereGeometry(0.045, 4, 4), new THREE.MeshBasicMaterial({ color: 0x6a0000 }));
+  for (let i = 0; i < 22; i++) {
+    const p = new THREE.Mesh(new THREE.SphereGeometry(0.07, 5, 5), new THREE.MeshBasicMaterial({ color: 0x8a0000 }));
     p.position.set(x, y + 1, z);
     scene.add(p);
     gibs.push({
       mesh: p,
-      vx: (Math.random() - 0.5) * 7,
-      vy: 2 + Math.random() * 5,
-      vz: (Math.random() - 0.5) * 7,
-      life: 0.8,
+      vx: (Math.random() - 0.5) * 10,
+      vy: 3 + Math.random() * 7,
+      vz: (Math.random() - 0.5) * 10,
+      life: 1.4,
       decal: true
     });
   }
@@ -1816,10 +1824,11 @@ function hitscan(w) {
   let best = null, bestD = 1e9, part = "body";
   for (const e of enemies) {
     if (e.dead) continue;
-    const hh = ray.intersectObject(e.head, false);
-    const bh = ray.intersectObject(e.body, false);
-    if (hh[0] && hh[0].distance < bestD) { best = e; bestD = hh[0].distance; part = "head"; }
-    if (bh[0] && bh[0].distance < bestD) { best = e; bestD = bh[0].distance; part = "body"; }
+    const hits = ray.intersectObject(e.group, true);
+    if (!hits[0] || hits[0].distance >= bestD) continue;
+    best = e;
+    bestD = hits[0].distance;
+    part = hits[0].point.y > e.y + 1.38 ? "head" : "body";
   }
   for (const b of barrels) {
     if (b.dead) continue;
@@ -2019,7 +2028,7 @@ function hurtEnemy(e, dmg, part, hit) {
   e.hp -= dmg;
   e.hurt = 0.14;
   e.head.material.emissive = new THREE.Color(part === "head" ? 0x880000 : 0x330000);
-  spawnGibs(e.x, 1.1, e.z, part === "head" ? 10 : 5);
+  spawnGibs(e.x, 1.1, e.z, part === "head" ? 16 : 8);
   addDecal(e.x, e.y + 0.02, e.z);
   const wall = nearestWallHit(e.x, 1.2, e.z);
   if (wall) addDecal(e.x, 1.2, e.z, wall);
@@ -2031,7 +2040,7 @@ function killEnemy(e, gibby) {
   e.dead = true;
   e.state = "dead";
   SFX.death();
-  spawnGibs(e.x, 1.2, e.z, gibby ? 22 : 12);
+  spawnGibs(e.x, 1.2, e.z, gibby ? 36 : 24);
   addDecal(e.x, e.y + 0.02, e.z);
   const wall = nearestWallHit(e.x, 1.1, e.z);
   if (wall) addDecal(e.x, 1.1, e.z, wall);
@@ -2389,7 +2398,7 @@ function buildLevel() {
         light.position.set(x, 2.5, z);
         scene.add(light);
       }
-      if (ch === "^") placePad(x, 0, z, r <= 7);
+      if (ch === "^") placePad(x, 0, z, r <= 7, r <= 7);
       if (ch === "1") {
         const n = enemies.length;
         spawnEnemy(x, 0, z, false);
@@ -2466,6 +2475,10 @@ function buildLevel() {
     const ch = cell(c, r);
     if (isWall(ch) || ch === "^") continue;
     placePad(worldX(c), y, worldZ(r));
+  }
+  if (!pads.some((p) => p.yard)) {
+    const s = findCell("S");
+    placePad(worldX(s.c + 5), 0, worldZ(s.r + 2), true, true);
   }
 
   for (let r = 0; r < H; r++) {
@@ -2778,7 +2791,7 @@ function tick(dt) {
     p.nub.material.emissive.setHex(p.flash > 0 ? 0xcc7700 : (p.yard ? 0xaa5500 : 0x553300));
     p.disk.position.y = (p.yard ? 0.14 : 0.1) + Math.sin(titleT * 10 + p.x) * (p.yard ? 0.05 : 0.02) + (p.flash > 0 ? 0.08 : 0);
     if (p.cool > 0) continue;
-    if (Math.hypot(player.x - p.x, player.z - p.z) < 1.18 && player.y < p.y + 1.25 && player.y > p.y - 0.4) {
+    if (Math.hypot(player.x - p.x, player.z - p.z) < (p.yard ? 1.62 : 1.18) && player.y < p.y + 1.25 && player.y > p.y - 0.4) {
       player.vy = PAD_UP;
       player.onGround = false;
       if (moving) {
