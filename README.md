@@ -25,8 +25,8 @@ Or open `index.html` directly. A local server is safer for the audio file.
 
 ## Level flow (shareware E1A1 shape)
 
-1. Spawn on courtyard dirt, tree on your left, a guard in your face
-2. Main door north into the hall, then the hub
+1. Spawn on courtyard dirt facing open yard: floor, walls, sky, a guard ahead
+2. Main door in the south wall into the hall, then the hub
 3. Bounce pads later, up to the east catwalk for the gold key
 4. Gold door north into the jagged / pillar wing
 5. Drop into the sunken hall for the silver key
