@@ -27,7 +27,7 @@ Or open `index.html` directly. A local server is safer for the audio file.
 
 ## Level flow (shareware E1A1 shape)
 
-1. Spawn on courtyard dirt, looking east down the yard. No pad underfoot. A bronze bounce pad is a few steps ahead. Two guards stand in the yard at a fightable distance. A monk meal sits past the pad. Door is in the south wall. They do not shoot you while you stand on S.
+1. Spawn on courtyard dirt, looking east down the yard. No pad underfoot. A bronze bounce pad sits three steps ahead on the dirt. Two guards stand past the fountain. A monk meal is beside them. Door is in the south wall. They do not shoot you while you stand on S. Ctrl and Enter fire.
 2. Main door in the south wall into the hall, then the hub
 3. Bounce pads later, up to the east catwalk for the gold key
 4. Gold door north into the jagged / pillar wing

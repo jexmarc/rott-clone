@@ -53,8 +53,8 @@ const MAP = [
   "#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~##",
   "#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~##",
   "#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~##",
-  "#~~~~~~~S~~~~~~1~~~~~~~~~~~~~~~~~~##",
-  "#~~~~~~~~~~~^~1~H~~~~~~~t~~R~~M~~~##",
+  "#~~~~~~~S~~^~~~1~~~~~~~~~~~~~~~~~~##",
+  "#~~~~~~~~~~~~~1~H~~~~~~~t~~R~~M~~~##",
   "#~~~~~~~~~Z~~~~~~~~~~U~~~~~~~B~~~~##",
   "#~~~~~~~~~~~~~~~~~~~~~T~~~~~~PQY.*##",
   "###########D########################",
@@ -748,7 +748,7 @@ const SFX = {
   },
   step(kind, run) {
     const d = footDest();
-    const vol = run ? 0.95 : 0.78;
+    const vol = run ? 1.25 : 1.05;
     if (kind === "metal") {
       kick(155, 0.07, vol * 0.55, d);
       blast(0.08, vol * 0.7, 2200, "bandpass", 1.4, d);
@@ -764,11 +764,11 @@ const SFX = {
     }
   },
   drip() {
-    playOsc(640 + Math.random() * 420, 0.08, "sine", 0.16, 200);
-    playNoise(0.05, 0.1, 2400, "highpass");
+    playOsc(640 + Math.random() * 420, 0.1, "sine", 0.28, 200);
+    playNoise(0.06, 0.18, 2400, "highpass");
   },
   crackle() {
-    blast(0.05, 0.12, 1800, "bandpass", 1.6);
+    blast(0.06, 0.22, 1800, "bandpass", 1.6);
   },
   enemyShot() {
     crack(0.28);
@@ -880,15 +880,15 @@ function updateAmbience(dt, moving, running, airborne) {
   if (!amb.master) return;
   const t = ac.currentTime;
   const yard = playerCell().r <= 7;
-  if (amb.windG) amb.windG.gain.setTargetAtTime(yard ? 0.22 : 0.05, t, 0.3);
-  if (amb.airG) amb.airG.gain.setTargetAtTime(yard ? 0.12 : 0.03, t, 0.3);
-  if (amb.torchG) amb.torchG.gain.setTargetAtTime((yard ? 0.045 : 0.11) * (0.7 + Math.random() * 0.5), t, 0.07);
+  if (amb.windG) amb.windG.gain.setTargetAtTime(yard ? 0.34 : 0.08, t, 0.3);
+  if (amb.airG) amb.airG.gain.setTargetAtTime(yard ? 0.18 : 0.05, t, 0.3);
+  if (amb.torchG) amb.torchG.gain.setTargetAtTime((yard ? 0.1 : 0.16) * (0.7 + Math.random() * 0.5), t, 0.07);
   if (amb.clothG) amb.clothG.gain.setTargetAtTime(airborne ? 0.06 : (moving ? (running ? 0.2 : 0.14) : 0.045), t, 0.1);
   if (amb.rushG) amb.rushG.gain.setTargetAtTime(airborne ? 0.18 : 0.001, t, 0.08);
   if (amb.droneG) amb.droneG.gain.setTargetAtTime(yard ? 0.04 : 0.06, t, 0.4);
   amb.dripT -= dt;
   if (amb.dripT <= 0) {
-    amb.dripT = yard ? 2.2 + Math.random() * 2.6 : 0.85 + Math.random() * 1.5;
+    amb.dripT = yard ? 1.4 + Math.random() * 1.8 : 0.7 + Math.random() * 1.2;
     SFX.drip();
   }
   amb.crackleT -= dt;
@@ -1741,7 +1741,7 @@ function buildGun(id) {
 
 function setupGun() {
   gunRoot = new THREE.Group();
-  gunRoot.scale.set(0.7, 0.7, 0.7);
+  gunRoot.scale.set(0.52, 0.52, 0.52);
   camera.add(gunRoot);
   muzzle = new THREE.PointLight(0xffaa55, 0, 7);
   muzzle.position.set(0.24, -0.16, -0.92);
@@ -2565,7 +2565,7 @@ function startGame() {
     bootSound();
   }
   lockPointer();
-  showMsg("THE HUNT BEGINS", 1500);
+  showMsg("CTRL ENTER FIRE", 2200);
 }
 
 function clickOptions(p) {
@@ -2657,10 +2657,14 @@ function bind() {
       if (e.code === "KeyM") toggleMute();
       return;
     }
-    if (started && (/^(Arrow|Space|KeyW|KeyA|KeyS|KeyD|Shift|Control|Enter)/.test(e.code || "") || e.key === " ")) {
+    if (started && (/^(Arrow|Space|KeyW|KeyA|KeyS|KeyD|Shift|Control|Enter)/.test(e.code || "") || e.key === " " || e.key === "Control" || e.key === "Enter")) {
       e.preventDefault();
     }
     setKey(e, true);
+    if (started && !optionsOpen && isFireEvent(e)) {
+      e.preventDefault();
+      fire();
+    }
     if (e.code === "KeyM" && !started) toggleMute();
     if (e.code === "Escape") {
       e.preventDefault();
@@ -2668,10 +2672,6 @@ function bind() {
       return;
     }
     if (!started) return;
-    if (isFireEvent(e)) {
-      e.preventDefault();
-      fire();
-    }
     if (codeIs("use", e.code)) use();
     if (codeIs("reload", e.code)) startReload();
     if (codeIs("wep1", e.code) && have[0]) { wepI = 0; swapGun(); }
