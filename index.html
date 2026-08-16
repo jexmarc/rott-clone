@@ -55,7 +55,7 @@ const MAP = [
   "#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~##",
   "#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~##",
   "#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~##",
-  "#~~~~~~~S~~^~1~~~~~~~~~~~~~~~~~~~~##",
+  "#~~~~~~~S~^~~1~~~~~~~~~~~~~~~~~~~~##",
   "#~~~~~~~~~~~~H~~~~~~~~~~t~~R~~M~~~##",
   "#~~~~~~~~~~~~~~~~~~~Z~~U~~~~~B~~~~##",
   "#~~~~~~~~~~~~~~~~~~~~~T~~~~~~PQY.*##",
@@ -201,9 +201,16 @@ let wantLock = false;
 let lockHintOnce = false;
 let lockAskedAt = 0;
 let padBoost = 0;
+let padAir = 0;
 let lookFreeze = 0;
+let eatClicks = false;
+let clickArmed = false;
 let chevrons = [];
 let suppressShot = 0;
+let openYaw = Math.PI / 2;
+let openPitch = 0.18;
+let openFwdX = 1;
+let openFwdZ = 0;
 let invulnT = 0;
 let lookSens = 1;
 let amb = { nodes: [], dripT: 0, crackleT: 0.2, master: null };
@@ -288,6 +295,7 @@ function isFireEvent(e) {
 }
 
 function fireHeld() {
+  if (!clickArmed || eatClicks || suppressShot > 0) return actionHeld("fire");
   return mouseDown || actionHeld("fire");
 }
 
@@ -1420,6 +1428,7 @@ function closeOptions(viaClick) {
   waitingBind = null;
   mouseDown = false;
   suppressShot = viaClick ? 1 : 0;
+  if (viaClick) clickArmed = false;
   wantLock = false;
   ignoreUnlock = false;
   ui.style.pointerEvents = "none";
@@ -1541,54 +1550,41 @@ function placePad(x, y, z, yard, force) {
   if (dist < TILE * 1.05) return;
   if (!force && dist < TILE * 2.2) return;
   const group = new THREE.Group();
-  const rad = yard ? 1.85 : 1.12;
+  const rad = yard ? 2.2 : 1.12;
   const base = new THREE.Mesh(
-    new THREE.CylinderGeometry(rad, rad + 0.08, yard ? 0.28 : 0.16, 12),
+    new THREE.CylinderGeometry(rad, rad + 0.08, yard ? 0.22 : 0.16, 12),
     yard ? new THREE.MeshBasicMaterial({ color: 0x6a4010 }) : mat(metalTex, 0x665544)
   );
   const disk = new THREE.Mesh(
-    new THREE.CylinderGeometry(rad - 0.1, rad - 0.06, yard ? 0.16 : 0.12, 12),
+    new THREE.CylinderGeometry(rad - 0.08, rad - 0.04, yard ? 0.18 : 0.12, 12),
     yard
       ? new THREE.MeshBasicMaterial({ map: padTex, color: 0xffc030 })
       : mat(padTex, 0xffffff, 0x221100)
   );
-  disk.position.y = yard ? 0.16 : 0.1;
+  disk.position.y = yard ? 0.14 : 0.1;
   const nub = new THREE.Mesh(
-    new THREE.CylinderGeometry(yard ? 0.42 : 0.22, yard ? 0.52 : 0.28, yard ? 0.22 : 0.08, 8),
+    new THREE.CylinderGeometry(yard ? 0.38 : 0.22, yard ? 0.48 : 0.28, yard ? 0.1 : 0.08, 8),
     yard
       ? new THREE.MeshBasicMaterial({ color: 0xffe060 })
       : new THREE.MeshLambertMaterial({ color: 0xf0b028, emissive: 0x553300, flatShading: true })
   );
-  nub.position.y = yard ? 0.32 : 0.16;
+  nub.position.y = yard ? 0.22 : 0.16;
   group.add(base, disk, nub);
-  let column = null;
   if (yard) {
     const ring = new THREE.Mesh(
-      new THREE.TorusGeometry(1.55, 0.14, 6, 16),
+      new THREE.TorusGeometry(1.85, 0.16, 6, 16),
       new THREE.MeshBasicMaterial({ color: 0xffd040 })
     );
     ring.rotation.x = Math.PI / 2;
-    ring.position.y = 0.34;
+    ring.position.y = 0.28;
     group.add(ring);
-    column = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.28, 0.48, 2.6, 8),
-      new THREE.MeshBasicMaterial({ color: 0xffc040 })
-    );
-    column.position.y = 1.5;
-    group.add(column);
-    const cap = new THREE.Mesh(
-      new THREE.SphereGeometry(0.28, 8, 8),
-      new THREE.MeshBasicMaterial({ color: 0xffee80 })
-    );
-    cap.position.y = 2.85;
-    group.add(cap);
-    const light = new THREE.PointLight(0xffb040, 1.1, 12, 1.4);
-    light.position.y = 2.2;
+    const light = new THREE.PointLight(0xffb040, 1.15, 14, 1.4);
+    light.position.y = 1.1;
     group.add(light);
   }
   group.position.set(x, y, z);
   scene.add(group);
-  pads.push({ x, z, y, group, disk, nub, column, cool: 0, flash: 0, yard: !!yard });
+  pads.push({ x, z, y, group, disk, nub, rad, cool: 0, flash: 0, yard: !!yard });
 }
 
 function nearSpawn(x, z) {
@@ -1753,7 +1749,10 @@ function tryMove(dx, dy, dz) {
   let { x, y, z } = player;
   if (!overlaps(x + dx, y, z)) x += dx;
   else if (!overlaps(x + dx * 0.4, y, z)) x += dx * 0.4;
-  if (!overlaps(x, y + dy, z)) y += dy;
+  if (padAir > 0) {
+    y += dy;
+    if (dy > 0) player.onGround = false;
+  } else if (!overlaps(x, y + dy, z)) y += dy;
   else {
     if (dy < 0) { player.onGround = true; player.vy = 0; }
     else player.vy = 0;
@@ -1766,7 +1765,7 @@ function tryMove(dx, dy, dz) {
   const ch = cell(col, row);
   if (ch === ",") floor = -2.2;
   if (ch === "c" && y >= CAT_H - 0.7) floor = CAT_H;
-  if (y < floor) { y = floor; player.onGround = true; player.vy = 0; }
+  if (y < floor && padAir <= 0) { y = floor; player.onGround = true; player.vy = 0; }
   player.x = x; player.y = y; player.z = z;
 }
 
@@ -1868,6 +1867,7 @@ function swapGun() {
 }
 
 function fire() {
+  if ((!clickArmed || eatClicks || suppressShot > 0) && !actionHeld("fire")) return;
   const w = currentWep();
   if (reloading > 0) return;
   if (mag[wepI] <= 0) {
@@ -2309,7 +2309,8 @@ function resetPlayer() {
   gunRecoil = 0;
   timeAlive = 0;
   padBoost = 0;
-  lookFreeze = 0.55;
+  padAir = 0;
+  lookFreeze = 0.8;
   invulnT = 3.2;
   hitCueT = 0;
   hitMarkT = 0;
@@ -2368,39 +2369,202 @@ function faceTheYard() {
   applyLook();
 }
 
+function aimEastYard() {
+  if (!player || !camera) return;
+  player.pitch = 0.18;
+  let bestYaw = Math.PI / 2, best = -1e9;
+  for (let i = 0; i < 64; i++) {
+    player.yaw = (i / 64) * Math.PI * 2;
+    applyLook();
+    const f = camForward();
+    const open = openRay(f.x, f.z);
+    if (f.x < 0.9 || open < 18) continue;
+    const score = f.x * 80 + open;
+    if (score > best) {
+      best = score;
+      bestYaw = player.yaw;
+    }
+  }
+  if (best < 0) {
+    best = -1e9;
+    for (let i = 0; i < 64; i++) {
+      player.yaw = (i / 64) * Math.PI * 2;
+      applyLook();
+      const f = camForward();
+      if (f.x > best) {
+        best = f.x;
+        bestYaw = player.yaw;
+      }
+    }
+  }
+  player.yaw = bestYaw;
+  player.pitch = 0.18;
+  applyLook();
+  const f = camForward();
+  openYaw = player.yaw;
+  openPitch = 0.18;
+  openFwdX = f.x;
+  openFwdZ = f.z;
+}
+
+function padWorld(p) {
+  if (p.group) return { x: p.group.position.x, y: p.group.position.y, z: p.group.position.z };
+  return { x: p.x, y: p.y || 0, z: p.z };
+}
+
+function padHitR(p) {
+  const meshR = p.rad || (p.yard ? 2.2 : 1.12);
+  return meshR + PLAYER_R + (p.yard ? 0.65 : 0.2);
+}
+
+function feetOnPad(p) {
+  if (!player || !p) return false;
+  const w = padWorld(p);
+  p.x = w.x;
+  p.z = w.z;
+  const hitR = padHitR(p);
+  if (player.y > w.y + 3.4 || player.y < w.y - 0.85) return false;
+  if (Math.hypot(player.x - w.x, player.z - w.z) < hitR) return true;
+  if (!p.yard) return false;
+  const along = (player.x - w.x) * openFwdX + (player.z - w.z) * openFwdZ;
+  const across = (player.x - w.x) * -openFwdZ + (player.z - w.z) * openFwdX;
+  return Math.abs(along) < hitR && Math.abs(across) < hitR;
+}
+
+function bounceOff(p) {
+  player.vy = PAD_UP;
+  player.onGround = false;
+  player.y += 0.5;
+  padAir = 1.2;
+  padBoost = 0.5;
+  p.cool = 0.7;
+  p.flash = 1;
+  SFX.pad();
+  if (window.console) {
+    console.log("[ROTT] BOUNCE vy=" + player.vy.toFixed(1) + " at", player.x.toFixed(2), player.z.toFixed(2), "disk", p.x.toFixed(2), p.z.toFixed(2));
+  }
+}
+
+function clearLaunchLane(x0, z0, x1, z1) {
+  const minx = Math.min(x0, x1) - 1.8, maxx = Math.max(x0, x1) + 1.8;
+  const minz = Math.min(z0, z1) - 1.8, maxz = Math.max(z0, z1) + 1.8;
+  for (let i = 0; i < solids.length; i++) {
+    const s = solids[i];
+    const wall = (s.maxy - s.miny) >= WALL_H - 0.3 && (s.maxx - s.minx) >= TILE * 0.85;
+    if (wall) continue;
+    if (s.maxx > minx && s.minx < maxx && s.maxz > minz && s.minz < maxz) s._open = true;
+  }
+}
+
+function walkHitsWall(x, z, fx, fz, dist) {
+  const steps = Math.max(8, Math.ceil(dist / 0.4));
+  for (let i = 1; i <= steps; i++) {
+    const t = (i / steps) * dist;
+    const px = x + fx * t, pz = z + fz * t;
+    const c = Math.round(px / TILE + W / 2);
+    const r = Math.round(pz / TILE + 2);
+    const ch = cell(c, r);
+    if (isWall(ch) || ch === "D" || ch === "g" || ch === "l") return true;
+    if (overlaps(px, 0, pz)) return true;
+  }
+  return false;
+}
+
+function proveOpening() {
+  const pad = pads.find((p) => p.yard);
+  const e = enemies.find((en) => en.opener);
+  const f = { x: openFwdX, z: openFwdZ };
+  const proof = { lookX: f.x, lookZ: f.z, launched: false, wall: false, openerAlive: !!(e && !e.dead && e.group.visible), padOnRay: false };
+  if (pad) {
+    const w = padWorld(pad);
+    const dx = w.x - player.x, dz = w.z - player.z;
+    const dist = Math.hypot(dx, dz) || 1;
+    proof.padOnRay = (dx * f.x + dz * f.z) / dist > 0.96;
+    proof.pad = { x: w.x, z: w.z, dist: dist };
+    const hitR = padHitR(pad);
+    let x = player.x, z = player.z;
+    for (let i = 0; i < 80; i++) {
+      x += f.x * MOVE * 0.016;
+      z += f.z * MOVE * 0.016;
+      const c = Math.round(x / TILE + W / 2);
+      const r = Math.round(z / TILE + 2);
+      if (isWall(cell(c, r))) {
+        proof.wall = true;
+        break;
+      }
+      if (Math.hypot(x - w.x, z - w.z) < hitR) {
+        proof.launched = true;
+        proof.walkT = i * 0.016;
+        break;
+      }
+    }
+  }
+  if (e) proof.opener = { x: e.x, z: e.z, dead: e.dead };
+  window.__rottProof = proof;
+  if (window.console) console.log("[ROTT] opening", proof);
+  return proof;
+}
+
 function seatOpening() {
   if (!player || !camera) return;
-  faceTheYard();
-  const f = camForward();
+  clearLaunchLane(player.x, player.z, player.x + 16, player.z);
+  clearLaunchLane(player.x, player.z, player.x - 16, player.z);
+  aimEastYard();
+  const padDist = 4.6;
+  const guardDist = 10.8;
+  if (walkHitsWall(player.x, player.z, openFwdX, openFwdZ, 16)) {
+    aimEastYard();
+  }
+  const f = { x: openFwdX, z: openFwdZ };
+  const padX = player.x + f.x * padDist;
+  const padZ = player.z + f.z * padDist;
+  clearLaunchLane(player.x, player.z, player.x + f.x * 16, player.z + f.z * 16);
   let pad = pads.find((p) => p.yard);
   if (!pad) {
-    placePad(player.x + f.x * 8.4, 0, player.z + f.z * 8.4, true, true);
+    placePad(padX, 0, padZ, true, true);
     pad = pads.find((p) => p.yard);
   }
   if (pad) {
-    pad.x = player.x + f.x * 8.4;
-    pad.z = player.z + f.z * 8.4;
-    pad.group.position.set(pad.x, pad.y, pad.z);
+    pad.x = padX;
+    pad.z = padZ;
+    pad.y = 0;
+    pad.rad = 2.2;
+    pad.group.position.set(padX, 0, padZ);
+    pad.group.updateMatrixWorld(true);
   }
+  const gx = player.x + openFwdX * guardDist;
+  const gz = player.z + openFwdZ * guardDist;
   let e = enemies.find((en) => en.opener);
   if (!e) {
-    spawnEnemy(player.x + f.x * 13.8, 0, player.z + f.z * 13.8, false);
+    spawnEnemy(gx, 0, gz, false);
     markOpener(enemies[enemies.length - 1]);
     e = enemies.find((en) => en.opener);
   }
   if (e) {
-    e.x = player.x + f.x * 13.8;
-    e.z = player.z + f.z * 13.8;
-    e.group.position.set(e.x, e.y, e.z);
+    e.dead = false;
+    e.hp = e.max;
+    e.group.visible = true;
+    e.state = "idle";
+    e.x = gx;
+    e.z = gz;
+    e.group.position.set(gx, e.y, gz);
   }
   const meal = pickups.find((p) => p.kind === "health" && p.yard);
   if (meal) {
-    const rx = -f.z, rz = f.x;
-    meal.x = player.x + f.x * 10.6 + rx * 2.1;
-    meal.z = player.z + f.z * 10.6 + rz * 2.1;
+    meal.x = player.x + openFwdX * 7.4 + -openFwdZ * 2.4;
+    meal.z = player.z + openFwdZ * 7.4 + openFwdX * 2.4;
     meal.mesh.position.set(meal.x, meal.y, meal.z);
   }
   if (pad) signpostPad(pad.x, pad.z);
+  const proof = proveOpening();
+  if (pad && (!proof.launched || proof.wall || !proof.padOnRay)) {
+    pad.x = player.x + openFwdX * padDist;
+    pad.z = player.z + openFwdZ * padDist;
+    pad.group.position.set(pad.x, 0, pad.z);
+    pad.group.updateMatrixWorld(true);
+    signpostPad(pad.x, pad.z);
+    proveOpening();
+  }
 }
 
 function losBlock(ch) {
@@ -2799,7 +2963,10 @@ function startGame() {
   initAudio();
   if (window.pauseTitleMusic) window.pauseTitleMusic();
   resetPlayer();
-  seatOpening();
+  eatClicks = true;
+  clickArmed = false;
+  mouseDown = false;
+  suppressShot = 0.55;
   for (const e of enemies) {
     e.dead = false; e.hp = e.max; e.group.visible = true; e.state = "idle";
     e.nextShot = 2.8 + Math.random();
@@ -2840,6 +3007,7 @@ function startGame() {
   } else {
     bootSound();
   }
+  seatOpening();
   lockPointer();
 }
 
@@ -2982,14 +3150,17 @@ function bind() {
   }, true);
   window.addEventListener("mousedown", (e) => {
     initAudio();
-    if (!started || optionsOpen) return;
+    if (!started || optionsOpen || eatClicks || !clickArmed || suppressShot > 0) return;
     if (e.button !== 0 && e.button !== 2) return;
     if (!isLocked()) lockPointer();
-    if (suppressShot) { suppressShot = 0; return; }
     mouseDown = true;
     fire();
   }, true);
-  window.addEventListener("mouseup", () => { mouseDown = false; }, true);
+  window.addEventListener("mouseup", () => {
+    mouseDown = false;
+    eatClicks = false;
+    clickArmed = true;
+  }, true);
   window.addEventListener("contextmenu", (e) => {
     if (started && !optionsOpen) e.preventDefault();
   }, true);
@@ -3014,7 +3185,13 @@ function tick(dt) {
     return;
   }
   timeAlive += dt;
-  if (lookFreeze > 0) lookFreeze -= dt;
+  if (lookFreeze > 0) {
+    lookFreeze -= dt;
+    player.yaw = openYaw;
+    player.pitch = openPitch;
+  }
+  if (padAir > 0) padAir -= dt;
+  if (suppressShot > 0) suppressShot -= dt;
   if (invulnT > 0) invulnT -= dt;
   if (msgT > 0) msgT -= dt;
   if (dmgT > 0) dmgT -= dt;
@@ -3088,34 +3265,10 @@ function tick(dt) {
     } else {
       p.nub.material.color.setHex(p.flash > 0 ? 0xffee88 : 0xffe060);
     }
-    const bobY = Math.sin(titleT * 8 + p.x) * (p.yard ? 0.08 : 0.02);
-    p.disk.position.y = (p.yard ? 0.16 : 0.1) + bobY + (p.flash > 0 ? 0.08 : 0);
-    if (p.column) p.column.scale.y = 1 + Math.sin(titleT * 5 + p.z) * 0.06;
-    if (p.cool > 0) continue;
-    const pdx = player.x - p.x, pdz = player.z - p.z;
-    const onDisk = Math.hypot(pdx, pdz) < (p.yard ? 3.6 : 1.18);
-    let onPath = false;
-    if (p.yard && player) {
-      const sx = worldX(findCell("S").c), sz = worldZ(findCell("S").r);
-      const vx = p.x - sx, vz = p.z - sz;
-      const plen = Math.hypot(vx, vz) || 1;
-      const t = ((player.x - sx) * vx + (player.z - sz) * vz) / (plen * plen);
-      if (t > 0.45 && t < 1.15) {
-        const cx = sx + vx * t, cz = sz + vz * t;
-        onPath = Math.hypot(player.x - cx, player.z - cz) < 2.2;
-      }
-    }
-    if ((onDisk || onPath) && player.y < p.y + 2.4 && player.y > p.y - 0.6) {
-      player.vy = PAD_UP;
-      player.onGround = false;
-      padBoost = 0.5;
-      const f = camForward();
-      player.x += f.x * 0.6;
-      player.z += f.z * 0.6;
-      p.cool = 0.45;
-      p.flash = 1;
-      SFX.pad();
-    }
+    const bobY = Math.sin(titleT * 8 + p.x) * (p.yard ? 0.06 : 0.02);
+    p.disk.position.y = (p.yard ? 0.14 : 0.1) + bobY + (p.flash > 0 ? 0.08 : 0);
+    if (p.cool > 0 || padAir > 0) continue;
+    if (feetOnPad(p)) bounceOff(p);
   }
 
   for (const p of pickups) {
