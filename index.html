@@ -2245,6 +2245,7 @@ window.addEventListener("load", () => {
     ug.fillStyle = "#000";
     ug.fillRect(0, 0, UW, UH);
     drawText(ug, "BOOT FAILED", 160, 90, "#e02020", 1, "center");
+    if (err && err.message) drawText(ug, String(err.message).slice(0, 36), 160, 110, "#c9a66b", 1, "center");
   }
 });
 })();
