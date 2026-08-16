@@ -1151,6 +1151,8 @@ function paintHUD(g) {
   g.fillRect(156, 87, 8, 1);
   if (hitMarkT > 0) {
     const a = Math.min(1, hitMarkT * 5);
+    g.fillStyle = "rgba(255,240,80," + (a * 0.22) + ")";
+    g.fillRect(120, 60, 80, 56);
     g.fillStyle = "rgba(255,220,40," + a + ")";
     g.fillRect(148, 80, 6, 2);
     g.fillRect(166, 80, 6, 2);
@@ -1490,6 +1492,29 @@ function makeLabel(text) {
   return new THREE.Mesh(new THREE.PlaneGeometry(2.2, 0.55), new THREE.MeshBasicMaterial({ map: t }));
 }
 
+function signpostPad(px, pz) {
+  const s = findCell("S");
+  const sx = worldX(s.c), sz = worldZ(s.r);
+  const dx = px - sx, dz = pz - sz;
+  const len = Math.hypot(dx, dz) || 1;
+  const ux = dx / len, uz = dz / len;
+  const yaw = Math.atan2(ux, uz);
+  const shape = new THREE.Shape();
+  shape.moveTo(0, 0.55);
+  shape.lineTo(-0.4, -0.28);
+  shape.lineTo(0.4, -0.28);
+  shape.closePath();
+  const geo = new THREE.ShapeGeometry(shape);
+  for (let i = 1; i <= 3; i++) {
+    const t = 2.4 * i;
+    const chev = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: 0xffd040, side: THREE.DoubleSide }));
+    chev.position.set(sx + ux * t, 0.12, sz + uz * t);
+    chev.rotation.x = -Math.PI / 2;
+    chev.rotation.z = -yaw;
+    scene.add(chev);
+  }
+}
+
 function placePad(x, y, z, yard, force) {
   const s = findCell("S");
   const dist = Math.hypot(x - worldX(s.c), z - worldZ(s.r));
@@ -1500,7 +1525,9 @@ function placePad(x, y, z, yard, force) {
   const base = new THREE.Mesh(new THREE.CylinderGeometry(rad, rad + 0.06, yard ? 0.22 : 0.16, 12), mat(metalTex, 0x665544));
   const disk = new THREE.Mesh(
     new THREE.CylinderGeometry(rad - 0.08, rad - 0.04, 0.12, 12),
-    mat(padTex, 0xffffff, yard ? 0x553300 : 0x221100)
+    yard
+      ? new THREE.MeshBasicMaterial({ map: padTex, color: 0xffc040 })
+      : mat(padTex, 0xffffff, 0x221100)
   );
   disk.position.y = yard ? 0.14 : 0.1;
   const nub = new THREE.Mesh(
@@ -1606,7 +1633,7 @@ function spawnBarrel(x, z) {
 function spawnGibs(x, y, z, n, color) {
   SFX.gib();
   for (let i = 0; i < n; i++) {
-    const s = 0.16 + Math.random() * 0.42;
+    const s = 0.2 + Math.random() * 0.5;
     const m = new THREE.Mesh(
       new THREE.BoxGeometry(s, s * (0.55 + Math.random()), s),
       new THREE.MeshBasicMaterial({ color: color || (Math.random() > 0.22 ? 0xc81810 : 0xc4a060) })
@@ -1638,7 +1665,7 @@ function spawnGibs(x, y, z, n, color) {
 
 function addDecal(x, y, z, wall) {
   const d = new THREE.Mesh(
-    new THREE.CircleGeometry(0.22 + Math.random() * 0.35, 7),
+    new THREE.CircleGeometry(0.32 + Math.random() * 0.45, 7),
     new THREE.MeshBasicMaterial({ map: bloodTex, transparent: true, depthWrite: false, color: 0xaa2222 })
   );
   if (wall) {
@@ -1726,12 +1753,12 @@ function addPart(parent, geo, mat, x, y, z, rx, ry, rz) {
 function buildPistol(name, x, y, z, yaw) {
   const p = new THREE.Group();
   p.name = name;
-  addPart(p, new THREE.BoxGeometry(0.1, 0.22, 0.11), metalMat(0x8a4a1c), 0, -0.12, 0.1, 0.38);
-  addPart(p, new THREE.BoxGeometry(0.12, 0.13, 0.32), metalMat(0xb8b898), 0, 0, -0.02);
-  addPart(p, new THREE.BoxGeometry(0.1, 0.075, 0.28), metalMat(0xd8d8b8), 0, 0.07, -0.04);
-  addPart(p, new THREE.BoxGeometry(0.05, 0.05, 0.26), metalMat(0xc8c8a8), 0, -0.01, -0.26);
-  addPart(p, new THREE.BoxGeometry(0.028, 0.055, 0.04), metalMat(0x9a9a80), 0, -0.08, 0.04);
-  addPart(p, new THREE.BoxGeometry(0.04, 0.03, 0.08), metalMat(0x333328), 0, 0.1, -0.2);
+  addPart(p, new THREE.BoxGeometry(0.055, 0.12, 0.06), metalMat(0x8a4a1c), 0, -0.07, 0.05, 0.38);
+  addPart(p, new THREE.BoxGeometry(0.065, 0.07, 0.17), metalMat(0xb8b898), 0, 0, -0.01);
+  addPart(p, new THREE.BoxGeometry(0.055, 0.04, 0.15), metalMat(0xd8d8b8), 0, 0.04, -0.02);
+  addPart(p, new THREE.BoxGeometry(0.028, 0.028, 0.14), metalMat(0xc8c8a8), 0, 0, -0.14);
+  addPart(p, new THREE.BoxGeometry(0.016, 0.03, 0.022), metalMat(0x9a9a80), 0, -0.045, 0.02);
+  addPart(p, new THREE.BoxGeometry(0.022, 0.016, 0.045), metalMat(0x333328), 0, 0.055, -0.11);
   p.position.set(x, y, z);
   p.rotation.y = yaw || 0;
   return p;
@@ -1740,8 +1767,8 @@ function buildPistol(name, x, y, z, yaw) {
 function buildGun(id) {
   const g = new THREE.Group();
   if (id === "pistol") {
-    g.add(buildPistol("rightPistol", 0.14, -0.28, -0.42, 0));
-    g.add(buildPistol("leftPistol", -0.12, -0.27, -0.4, 0.08));
+    g.add(buildPistol("rightPistol", 0.11, -0.36, -0.72, 0));
+    g.add(buildPistol("leftPistol", -0.1, -0.35, -0.7, 0.08));
   } else if (id === "mp40") {
     addPart(g, new THREE.BoxGeometry(0.11, 0.12, 0.46), metalMat(0xb8b898), 0.28, -0.18, -0.58);
     addPart(g, new THREE.BoxGeometry(0.1, 0.09, 0.22), metalMat(0x8a4a18), 0.28, -0.26, -0.36);
@@ -1777,19 +1804,19 @@ function buildGun(id) {
 
 function setupGun() {
   gunRoot = new THREE.Group();
-  gunRoot.scale.set(0.26, 0.26, 0.26);
+  gunRoot.scale.set(1, 1, 1);
   camera.add(gunRoot);
-  muzzle = new THREE.PointLight(0xffaa55, 0, 7);
-  muzzle.position.set(0.24, -0.16, -0.92);
+  muzzle = new THREE.PointLight(0xffaa55, 0, 4);
+  muzzle.position.set(0.12, -0.28, -0.7);
   camera.add(muzzle);
-  gunLight = new THREE.PointLight(0xffcc88, 1.1, 3.2);
-  gunLight.position.set(0.15, -0.1, -0.2);
+  gunLight = new THREE.PointLight(0xffcc88, 0.55, 2.2);
+  gunLight.position.set(0.08, -0.22, -0.35);
   camera.add(gunLight);
   gunFlash = new THREE.Mesh(
-    new THREE.PlaneGeometry(0.28, 0.28),
+    new THREE.PlaneGeometry(0.1, 0.1),
     new THREE.MeshBasicMaterial({ map: flashTex, transparent: true, depthWrite: false, side: THREE.DoubleSide })
   );
-  gunFlash.position.set(0.24, -0.18, -0.9);
+  gunFlash.position.set(0.12, -0.3, -0.68);
   gunFlash.visible = false;
   camera.add(gunFlash);
   swapGun();
@@ -1818,14 +1845,14 @@ function fire() {
   viewPunch = w.kick * 1.6;
   gunRecoil = 1;
   if (w.id === "pistol") pistolHand ^= 1;
-  const hx = w.id === "pistol" ? (pistolHand ? -0.3 : 0.3) : 0.28;
+  const hx = w.id === "pistol" ? (pistolHand ? -0.12 : 0.12) : 0.14;
   if (muzzle) {
-    muzzle.position.set(hx, -0.16, -0.98);
-    muzzle.intensity = w.rocket ? 7.2 : 6.2;
+    muzzle.position.set(hx, -0.3, -0.72);
+    muzzle.intensity = w.rocket ? 4.2 : 3.4;
     muzzle.visible = true;
   }
   if (gunFlash) {
-    gunFlash.position.set(hx, -0.18, -0.96);
+    gunFlash.position.set(hx, -0.32, -0.7);
     gunFlash.visible = true;
     gunFlash.rotation.z = Math.random() * 6;
   }
@@ -2059,8 +2086,10 @@ function hurtEnemy(e, dmg, part, hit) {
   e.flinch = 0.22;
   hitMarkT = 0.22;
   e.head.material.emissive = new THREE.Color(part === "head" ? 0xcc2000 : 0x881000);
-  spawnGibs(e.x, 1.1, e.z, part === "head" ? 16 : 8);
-  playOsc(880, 0.04, "square", 0.1);
+  spawnGibs(e.x, 1.1, e.z, part === "head" ? 18 : 10);
+  blast(0.05, 0.55, 1800, "highpass", 0.8);
+  kick(90, 0.08, 0.45);
+  playOsc(220, 0.07, "square", 0.16, 80);
   addDecal(e.x, e.y + 0.02, e.z);
   const wall = nearestWallHit(e.x, 1.2, e.z);
   if (wall) addDecal(e.x, 1.2, e.z, wall);
@@ -2289,7 +2318,7 @@ function updateEnemy(e, dt) {
   const dist = Math.hypot(dx, dz) || 0.001;
   if (invulnT > 0 || timeAlive < 3.2) return;
   if (nearSpawn(player.x, player.z)) return;
-  if (timeAlive < 20 && !e.opener) return;
+  if (timeAlive < 28 && !e.opener) return;
   const los = dist < 36 && hasLOS(e);
   if (los) e.state = dist < 11 ? "shoot" : "chase";
   else if (e.state === "shoot" || e.state === "chase") e.state = "idle";
@@ -2305,14 +2334,14 @@ function updateEnemy(e, dt) {
     if (dist < 4.2) walk(-(dx / dist) * sp, -(dz / dist) * sp);
     e.nextShot -= dt;
     if (e.nextShot <= 0 && los && dist < 14) {
-      const chip = e.opener || timeAlive < 24;
-      e.nextShot = e.tough ? 0.55 : (chip ? 1.7 : 0.95);
+      const chip = e.opener || timeAlive < 28;
+      e.nextShot = e.tough ? 0.55 : (chip ? 2.1 : 1.0);
       SFX.enemyShot();
       const origin = new THREE.Vector3(e.x, 1.3, e.z);
       const dest = new THREE.Vector3(player.x, player.y + 1.3, player.z);
       addTracer(origin, dest);
-      const acc = e.tough ? 0.7 : (chip ? 0.22 : 0.5);
-      const dmg = e.tough ? 11 : (chip ? 3 : 6);
+      const acc = e.tough ? 0.7 : (chip ? 0.16 : 0.48);
+      const dmg = e.tough ? 11 : (chip ? 2 : 6);
       if (Math.random() < acc) hurtPlayer(dmg, e.x, e.z);
     }
   }
@@ -2517,6 +2546,8 @@ function buildLevel() {
     const s = findCell("S");
     placePad(worldX(s.c + 5), 0, worldZ(s.r + 2), true, true);
   }
+  const yardPad = pads.find((p) => p.yard);
+  if (yardPad) signpostPad(yardPad.x, yardPad.z);
 
   for (let r = 0; r < H; r++) {
     for (let c = 0; c < W; c++) {
@@ -2827,7 +2858,9 @@ function tick(dt) {
     p.cool = Math.max(0, p.cool - dt);
     p.flash = Math.max(0, p.flash - dt * 3);
     p.nub.material.emissive.setHex(p.flash > 0 ? 0xee8800 : (p.yard ? 0xcc6600 : 0x553300));
-    p.disk.position.y = (p.yard ? 0.14 : 0.1) + Math.sin(titleT * 10 + p.x) * (p.yard ? 0.05 : 0.02) + (p.flash > 0 ? 0.08 : 0);
+    const bobY = Math.sin(titleT * 8 + p.x) * (p.yard ? 0.12 : 0.02);
+    p.disk.position.y = (p.yard ? 0.14 : 0.1) + bobY + (p.flash > 0 ? 0.08 : 0);
+    if (p.yard) p.group.position.y = p.y + bobY * 0.45;
     if (p.column && p.column.material) {
       p.column.material.opacity = 0.38 + Math.sin(titleT * 6 + p.x) * 0.22;
       p.column.scale.y = 1 + Math.sin(titleT * 5 + p.z) * 0.08;
@@ -2941,15 +2974,15 @@ function tick(dt) {
   camera.rotation.x = player.pitch + gunKick + viewPunch * 0.35 + Math.sin(bob * 2) * (moving ? 0.035 : 0);
   camera.rotation.z = (moving ? -ix * 0.07 : camera.rotation.z * 0.8) + viewPunch * 0.14;
   if (gunRoot) {
-    gunRoot.position.y = -0.34 + Math.sin(bob) * 0.03 - gunRecoil * 0.06;
-    gunRoot.position.x = Math.cos(bob) * 0.02;
-    gunRoot.position.z = gunRecoil * 0.16;
-    gunRoot.rotation.x = gunRecoil * 0.32;
+    gunRoot.position.y = -0.08 + Math.sin(bob) * 0.02 - gunRecoil * 0.04;
+    gunRoot.position.x = Math.cos(bob) * 0.012;
+    gunRoot.position.z = gunRecoil * 0.08;
+    gunRoot.rotation.x = gunRecoil * 0.18;
     const left = gunRoot.getObjectByName("leftPistol");
     const right = gunRoot.getObjectByName("rightPistol");
     if (left && right) {
-      left.position.z = -0.44 + (pistolHand ? gunRecoil * 0.16 : 0);
-      right.position.z = -0.48 + (pistolHand ? 0 : gunRecoil * 0.16);
+      left.position.z = -0.7 + (pistolHand ? gunRecoil * 0.08 : 0);
+      right.position.z = -0.72 + (pistolHand ? 0 : gunRecoil * 0.08);
     }
   }
 }
