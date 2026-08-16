@@ -177,7 +177,10 @@ let lightning = 0;
 let faceHurt = 0;
 let landDip = 0;
 let wasOnGround = false;
-let held = {};
+const keysDown = Object.create(null);  /* never replace this object; resetPlayer replaces player */
+function clearKeys() {
+  for (const key of Object.keys(keysDown)) delete keysDown[key];
+}
 let optionsOpen = false;
 let slideDrag = false;
 let invulnT = 0;
@@ -259,17 +262,17 @@ function makeTextures() {
     const mortar = bx === 0 || by === 0 || bx === 15;
     const n = (hash(x, y) * 28) | 0;
     const stain = hash(x >> 2, y >> 2) > 0.82 ? 18 : 0;
-    if (mortar) return [96 + n * 0.35, 68 + n * 0.22, 40];
+    if (mortar) return [62 + n * 0.25, 36 + n * 0.15, 22];
     const dado = y > 42;
-    const base = dado ? 148 : 196;
-    return [base + n - stain, (base * 0.7 + n * 0.4) | 0, (base * 0.46) | 0];
+    const base = dado ? 168 : 220;
+    return [base + n - stain, (base * 0.52 + n * 0.25) | 0, (base * 0.28) | 0];
   });
   blockTex = texNoise(64, (x, y) => {
     const bx = x & 15, by = y & 15;
     const mortar = bx < 2 || by < 2;
     const n = (hash(x, y) * 22) | 0;
-    if (mortar) return [38, 28, 18];
-    return [96 + n, 70 + n * 0.5, 42 + n * 0.2];
+    if (mortar) return [48, 28, 16];
+    return [168 + n, 88 + n * 0.35, 42 + n * 0.15];
   });
   darkTex = texNoise(64, (x, y) => {
     const row = y >> 4;
@@ -292,9 +295,9 @@ function makeTextures() {
     const tile = (x >> 4) ^ (y >> 4);
     const n = (hash(x, y) * 22) | 0;
     const edge = (x & 15) < 1 || (y & 15) < 1;
-    if (edge) return [86, 58, 28];
-    const b = tile ? 236 : 208;
-    return [b + n, 168 + n * 0.45, 92];
+    if (edge) return [72, 42, 18];
+    const b = tile ? 246 : 214;
+    return [b + n, 176 + n * 0.35, 78];
   });
   metalTex = texNoise(64, (x, y) => {
     const n = (hash(x, y) * 14) | 0;
@@ -467,39 +470,41 @@ function crack(vol) {
 
 const SFX = {
   shoot() {
-    crack(0.85);
-    playNoise(0.12, 0.55, 900, "lowpass");
-    thump(78, 0.14, 0.72);
-    playOsc(190, 0.05, "square", 0.12, 60);
+    crack(1.05);
+    playNoise(0.16, 0.72, 780, "lowpass");
+    playNoise(0.035, 0.55, 8200, "highpass");
+    thump(70, 0.16, 0.9);
+    playOsc(210, 0.045, "square", 0.2, 48);
   },
   mp40() {
-    crack(0.62);
-    playNoise(0.07, 0.42, 1100, "lowpass");
-    thump(88, 0.08, 0.48);
+    crack(0.78);
+    playNoise(0.08, 0.55, 1000, "lowpass");
+    playNoise(0.02, 0.35, 7000, "highpass");
+    thump(84, 0.07, 0.62);
   },
   bazooka() {
-    playNoise(0.16, 0.55, 1800, "bandpass");
-    playNoise(0.22, 0.4, 500, "lowpass");
-    thump(62, 0.2, 0.7);
-    playOsc(240, 0.18, "sawtooth", 0.16, 70);
+    playNoise(0.2, 0.7, 1600, "bandpass");
+    playNoise(0.28, 0.55, 420, "lowpass");
+    thump(54, 0.24, 0.88);
+    playOsc(210, 0.2, "sawtooth", 0.22, 55);
   },
   heat() {
-    playNoise(0.2, 0.4, 2600, "bandpass");
-    playOsc(420, 0.22, "sawtooth", 0.14, 90);
-    thump(70, 0.16, 0.55);
+    playNoise(0.22, 0.52, 2400, "bandpass");
+    playOsc(480, 0.24, "sawtooth", 0.18, 80);
+    thump(66, 0.18, 0.7);
   },
   drunk() {
-    playNoise(0.14, 0.38, 1600, "bandpass");
-    playOsc(180, 0.12, "square", 0.12, 50);
-    playOsc(260, 0.16, "sawtooth", 0.1, 80);
-    thump(64, 0.18, 0.6);
+    playNoise(0.16, 0.5, 1500, "bandpass");
+    playOsc(170, 0.14, "square", 0.16, 44);
+    playOsc(280, 0.18, "sawtooth", 0.14, 70);
+    thump(58, 0.2, 0.72);
   },
   boom() {
-    playNoise(0.45, 0.85, 320, "lowpass");
-    playNoise(0.18, 0.5, 1800, "highpass");
-    thump(48, 0.5, 0.95);
-    thump(92, 0.22, 0.45);
-    playOsc(36, 0.4, "sine", 0.4, 18);
+    playNoise(0.5, 0.95, 280, "lowpass");
+    playNoise(0.2, 0.62, 2000, "highpass");
+    thump(42, 0.55, 1);
+    thump(88, 0.24, 0.55);
+    playOsc(32, 0.45, "sine", 0.48, 16);
   },
   reload() {
     playOsc(180, 0.06, "triangle", 0.12);
@@ -516,14 +521,15 @@ const SFX = {
     playOsc(70, 0.3, "sawtooth", 0.16, 36);
   },
   pad() {
-    playOsc(90, 0.22, "sine", 0.28, 520);
-    playOsc(140, 0.16, "triangle", 0.18, 380);
-    playNoise(0.12, 0.22, 1400, "bandpass");
-    thump(70, 0.16, 0.35);
+    playOsc(84, 0.26, "sine", 0.38, 640);
+    playOsc(150, 0.18, "triangle", 0.24, 420);
+    playNoise(0.14, 0.32, 1200, "bandpass");
+    thump(62, 0.2, 0.5);
   },
   pain() {
-    playOsc(160, 0.14, "sawtooth", 0.2, 60);
-    playNoise(0.1, 0.16, 600, "lowpass");
+    playOsc(150, 0.16, "sawtooth", 0.28, 48);
+    playNoise(0.12, 0.24, 520, "lowpass");
+    thump(90, 0.1, 0.22);
   },
   death() {
     playNoise(0.45, 0.5, 480, "lowpass");
@@ -885,7 +891,7 @@ function openOptions() {
   screen = "options";
   slideDrag = false;
   mouseDown = false;
-  held = {};
+  clearKeys();
   ui.style.pointerEvents = "auto";
   try { document.exitPointerLock(); } catch (err) {}
 }
@@ -1107,68 +1113,73 @@ function tryMove(dx, dy, dz) {
 
 function currentWep() { return weps[wepI]; }
 
-function metalMat(color, emissive) {
-  return new THREE.MeshBasicMaterial({ color: color || 0x888870 });
+function metalMat(color) {
+  return new THREE.MeshBasicMaterial({
+    map: metalTex || null,
+    color: color || 0xc8c8a0
+  });
 }
 
 function buildGun(id) {
   const g = new THREE.Group();
   if (id === "pistol") {
-    const grip = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.22, 0.11), metalMat(0x6a3a18));
-    grip.position.set(0.28, -0.28, -0.38);
+    const grip = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.24, 0.12), metalMat(0x8a4a1c));
+    grip.position.set(0.3, -0.28, -0.36);
     grip.rotation.x = 0.35;
-    const frame = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.13, 0.32), metalMat(0x4a4a40));
-    frame.position.set(0.28, -0.18, -0.48);
-    const slide = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.07, 0.28), metalMat(0x6a6a58));
-    slide.position.set(0.28, -0.12, -0.5);
-    const barrel = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, 0.22), metalMat(0x2a2a22));
-    barrel.position.set(0.28, -0.16, -0.68);
-    g.add(grip, frame, slide, barrel);
+    const frame = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.14, 0.34), metalMat(0xb0b090));
+    frame.position.set(0.3, -0.16, -0.48);
+    const slide = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.08, 0.3), metalMat(0xd0d0b0));
+    slide.position.set(0.3, -0.1, -0.5);
+    const barrel = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.055, 0.24), metalMat(0xc8c8a8));
+    barrel.position.set(0.3, -0.15, -0.7);
+    const trigger = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.06, 0.04), metalMat(0x9a9a80));
+    trigger.position.set(0.3, -0.24, -0.42);
+    g.add(grip, frame, slide, barrel, trigger);
   } else if (id === "mp40") {
-    const rec = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.1, 0.36), metalMat(0x2c2c24));
-    rec.position.set(0.26, -0.22, -0.55);
-    const wood = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.07, 0.16), metalMat(0x5a3a18));
-    wood.position.set(0.26, -0.3, -0.42);
-    const magz = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.22, 0.08), metalMat(0x33332a));
-    magz.position.set(0.26, -0.36, -0.52);
-    const barrel = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.04, 0.28), metalMat(0x1a1a16));
-    barrel.position.set(0.26, -0.2, -0.82);
-    const jacket = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.055, 0.18), metalMat(0x3a3a30));
-    jacket.position.set(0.26, -0.2, -0.78);
+    const rec = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.11, 0.38), metalMat(0xb8b898));
+    rec.position.set(0.28, -0.2, -0.55);
+    const wood = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.08, 0.18), metalMat(0x8a4a18));
+    wood.position.set(0.28, -0.28, -0.4);
+    const magz = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.24, 0.09), metalMat(0x9a9a78));
+    magz.position.set(0.28, -0.36, -0.52);
+    const barrel = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, 0.3), metalMat(0xc0c0a0));
+    barrel.position.set(0.28, -0.18, -0.84);
+    const jacket = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, 0.2), metalMat(0xa8a888));
+    jacket.position.set(0.28, -0.18, -0.78);
     g.add(rec, wood, magz, barrel, jacket);
   } else if (id === "bazooka") {
-    const tube = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.06, 0.72, 8), metalMat(0x3a3a22));
+    const tube = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.065, 0.76, 8), metalMat(0xc4b878));
     tube.rotation.x = Math.PI / 2;
-    tube.position.set(0.28, -0.2, -0.62);
-    const wood = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.1, 0.18), metalMat(0x5a3a14));
-    wood.position.set(0.28, -0.3, -0.4);
-    const rear = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.05, 0.1, 8), metalMat(0x2a2a18));
+    tube.position.set(0.3, -0.18, -0.62);
+    const wood = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.11, 0.2), metalMat(0x8a4a16));
+    wood.position.set(0.3, -0.28, -0.4);
+    const rear = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.055, 0.1, 8), metalMat(0xa8a880));
     rear.rotation.x = Math.PI / 2;
-    rear.position.set(0.28, -0.2, -0.28);
-    const sight = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.08, 0.04), metalMat(0x222));
-    sight.position.set(0.28, -0.12, -0.5);
+    rear.position.set(0.3, -0.18, -0.26);
+    const sight = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.09, 0.05), metalMat(0xd0d0b0));
+    sight.position.set(0.3, -0.1, -0.5);
     g.add(tube, wood, rear, sight);
   } else if (id === "heat") {
-    const tube = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.055, 0.62, 8), metalMat(0x2a2a28));
+    const tube = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.06, 0.64, 8), metalMat(0xb0b098));
     tube.rotation.x = Math.PI / 2;
-    tube.position.set(0.26, -0.2, -0.58);
-    const nose = new THREE.Mesh(new THREE.ConeGeometry(0.05, 0.12, 8), metalMat(0x8a2010, 0x401000));
+    tube.position.set(0.28, -0.18, -0.58);
+    const nose = new THREE.Mesh(new THREE.ConeGeometry(0.055, 0.13, 8), metalMat(0xe04018));
     nose.rotation.x = Math.PI / 2;
-    nose.position.set(0.26, -0.2, -0.92);
-    const box = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.2), metalMat(0x3a3a30));
-    box.position.set(0.26, -0.22, -0.4);
+    nose.position.set(0.28, -0.18, -0.92);
+    const box = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.11, 0.22), metalMat(0xc8a040));
+    box.position.set(0.28, -0.2, -0.4);
     g.add(tube, nose, box);
   } else {
-    const left = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.045, 0.5, 8), metalMat(0x4a3a18));
+    const left = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.05, 0.52, 8), metalMat(0xd0b050));
     const right = left.clone();
     left.rotation.x = Math.PI / 2;
     right.rotation.x = Math.PI / 2;
-    left.position.set(0.2, -0.2, -0.58);
-    right.position.set(0.32, -0.2, -0.58);
-    const body = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.12, 0.22), metalMat(0x3a2a14));
-    body.position.set(0.26, -0.24, -0.38);
-    const grip = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.14, 0.08), metalMat(0x4a2a10));
-    grip.position.set(0.26, -0.34, -0.34);
+    left.position.set(0.22, -0.18, -0.58);
+    right.position.set(0.34, -0.18, -0.58);
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.13, 0.24), metalMat(0xc88828));
+    body.position.set(0.28, -0.22, -0.36);
+    const grip = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.15, 0.09), metalMat(0x8a4a14));
+    grip.position.set(0.28, -0.32, -0.32);
     g.add(left, right, body, grip);
   }
   return g;
@@ -1564,7 +1575,8 @@ function resetPlayer() {
     yaw: Math.atan2(-(lookX - px), -(lookZ - pz)),
     pitch: 0.08,
     vx: 0, vy: 0, vz: 0,
-    onGround: true, hp: 100, armor: 0
+    onGround: true, hp: 100, armor: 0,
+    _k: keysDown
   };
   keys.gold = keys.silver = false;
   wepI = 0;
@@ -1643,11 +1655,11 @@ function updateEnemy(e, dt) {
 }
 
 function buildLevel() {
-  const mStone = new THREE.MeshLambertMaterial({ map: stoneTex, color: 0xffffff, emissive: 0x5a3a18, flatShading: true });
+  const mStone = new THREE.MeshLambertMaterial({ map: stoneTex, color: 0xffe0b0, emissive: 0x6a2810, flatShading: true });
   const mBlock = mat(blockTex, 0xf0d0a0, 0x2a1a08);
   const mDark = mat(darkTex, 0x887058);
   const mFloor = mat(floorTex, 0xe0c090, 0x2a1c10);
-  const mDirt = new THREE.MeshLambertMaterial({ map: dirtTex, color: 0xffe8c4, emissive: 0x9a6830, flatShading: true });
+  const mDirt = new THREE.MeshLambertMaterial({ map: dirtTex, color: 0xfff0c8, emissive: 0xb07028, flatShading: true });
   const mMetal = mat(metalTex, 0x889090);
   const mBanner = mat(bannerTex);
   const mCeil = new THREE.MeshLambertMaterial({ color: 0x1a120c, flatShading: true });
@@ -1657,10 +1669,10 @@ function buildLevel() {
   const mTree = new THREE.MeshLambertMaterial({ color: 0x5a7a30, emissive: 0x1a2808, flatShading: true });
   const mExit = new THREE.MeshLambertMaterial({ color: 0x28d050, emissive: 0x0a4018, flatShading: true });
 
-  scene.background = new THREE.Color(0xb86a40);
-  scene.fog = new THREE.Fog(0xb86a40, 88, 200);
-  scene.add(new THREE.AmbientLight(0xffefd4, 1.45));
-  scene.add(new THREE.HemisphereLight(0xfff0d0, 0x8a5530, 1.05));
+  scene.background = new THREE.Color(0xd87838);
+  scene.fog = new THREE.Fog(0xd87838, 110, 220);
+  scene.add(new THREE.AmbientLight(0xffe2a8, 1.55));
+  scene.add(new THREE.HemisphereLight(0xfff0c0, 0xa05020, 1.15));
   const sun = new THREE.DirectionalLight(0xffe8c0, 1.85);
   sun.position.set(-36, 54, 8);
   scene.add(sun);
@@ -1837,29 +1849,28 @@ function lockPointer() {
 }
 
 function setKey(e, down) {
-  held[e.code] = down;
+  keysDown[e.code] = down;
   const k = (e.key || "").toLowerCase();
-  if (k === "w" || e.code === "ArrowUp") held.KeyW = down;
-  if (k === "a" || e.code === "ArrowLeft") held.KeyA = down;
-  if (k === "s" || e.code === "ArrowDown") held.KeyS = down;
-  if (k === "d" || e.code === "ArrowRight") held.KeyD = down;
-  if (k === "e") held.KeyE = down;
-  if (k === "r") held.KeyR = down;
-  if (k === "m") held.KeyM = down;
-  if (k === " ") held.Space = down;
-  if (k === "shift") { held.ShiftLeft = down; held.ShiftRight = down; }
-  if (k === "1") held.Digit1 = down;
-  if (k === "2") held.Digit2 = down;
-  if (k === "3") held.Digit3 = down;
-  if (k === "4") held.Digit4 = down;
-  if (k === "5") held.Digit5 = down;
+  if (k === "w" || e.code === "ArrowUp") keysDown.KeyW = down;
+  if (k === "a" || e.code === "ArrowLeft") keysDown.KeyA = down;
+  if (k === "s" || e.code === "ArrowDown") keysDown.KeyS = down;
+  if (k === "d" || e.code === "ArrowRight") keysDown.KeyD = down;
+  if (k === "e") keysDown.KeyE = down;
+  if (k === "r") keysDown.KeyR = down;
+  if (k === "m") keysDown.KeyM = down;
+  if (k === " ") keysDown.Space = down;
+  if (k === "shift") { keysDown.ShiftLeft = down; keysDown.ShiftRight = down; }
+  if (k === "1") keysDown.Digit1 = down;
+  if (k === "2") keysDown.Digit2 = down;
+  if (k === "3") keysDown.Digit3 = down;
+  if (k === "4") keysDown.Digit4 = down;
+  if (k === "5") keysDown.Digit5 = down;
 }
 
 function startGame() {
   if (started) return;
-  if (!scene || !player) return;
+  if (!scene) return;
   initAudio();
-  if (!musicMuted && window.playTitleMusic) window.playTitleMusic();
   if (window.pauseTitleMusic) window.pauseTitleMusic();
   resetPlayer();
   if (camera && player) {
@@ -1903,13 +1914,11 @@ function startGame() {
 }
 
 function bind() {
+  if (player) player._k = keysDown;
   const onStartClick = (e) => {
     if (e && e.button != null && e.button !== 0) return;
     if (optionsOpen) return;
-    if (!started) {
-      startGame();
-      return;
-    }
+    if (!started) startGame();
     if (!isLocked()) lockPointer();
   };
   window.addEventListener("pointerdown", onStartClick, true);
@@ -2006,7 +2015,7 @@ function tick(dt) {
   if (faceHurt > 0) faceHurt -= dt;
   if (landDip > 0) landDip -= dt * 4;
 
-  const k = held;
+  const k = keysDown;
   let ix = 0, iz = 0;
   if (k.KeyW || k.ArrowUp) iz -= 1;
   if (k.KeyS || k.ArrowDown) iz += 1;
@@ -2208,8 +2217,8 @@ function main() {
       "void main(){",
       "  vec4 c = texture2D(tDiffuse, vUv);",
       "  float bayer = fract(sin(dot(gl_FragCoord.xy, vec2(12.9898,78.233))) * 43758.5453);",
-      "  c.rgb = c.rgb * 1.42 + vec3(0.055, 0.038, 0.022);",
-      "  c.rgb = floor(c.rgb * 28.0 + bayer * 0.28) / 28.0;",
+      "  c.rgb = c.rgb * 1.5 + vec3(0.06, 0.03, 0.012);",
+      "  c.rgb = floor(c.rgb * 26.0 + bayer * 0.3) / 26.0;",
       "  float scan = 0.97 + 0.03 * step(0.5, fract(gl_FragCoord.y * 0.5));",
       "  c.rgb *= scan;",
       "  gl_FragColor = c;",
