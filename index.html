@@ -186,14 +186,73 @@ function clearKeys() {
   for (const key of Object.keys(keysDown)) delete keysDown[key];
 }
 let optionsOpen = false;
+let optionsReturn = "title";
 let slideDrag = false;
+let waitingBind = null;
+let optHits = [];
 let invulnT = 0;
 let lookSens = 1;
 let amb = { nodes: [], dripT: 0 };
 
+const MOVE_ARROW = { fwd: "ArrowUp", back: "ArrowDown", left: "ArrowLeft", right: "ArrowRight" };
+
+function defaultBinds() {
+  return {
+    fwd: ["KeyW", "ArrowUp"],
+    back: ["KeyS", "ArrowDown"],
+    left: ["KeyA", "ArrowLeft"],
+    right: ["KeyD", "ArrowRight"],
+    jump: ["Space"],
+    run: ["ShiftLeft", "ShiftRight"],
+    use: ["KeyE"],
+    fire: ["ControlLeft", "ControlRight", "Enter", "NumpadEnter"],
+    reload: ["KeyR"],
+    wep1: ["Digit1"],
+    wep2: ["Digit2"],
+    wep3: ["Digit3"],
+    wep4: ["Digit4"],
+    wep5: ["Digit5"]
+  };
+}
+
+let binds = defaultBinds();
+
+function saveBinds() {
+  try { localStorage.setItem("rott-binds", JSON.stringify(binds)); } catch (err) {}
+}
+
+function loadBinds() {
+  binds = defaultBinds();
+  try {
+    const raw = JSON.parse(localStorage.getItem("rott-binds") || "null");
+    if (!raw || typeof raw !== "object") return;
+    for (const key of Object.keys(binds)) {
+      if (!Array.isArray(raw[key])) continue;
+      const codes = raw[key].filter((c) => typeof c === "string" && c && c !== "Escape");
+      const keep = MOVE_ARROW[key];
+      if (keep && codes.indexOf(keep) < 0) codes.push(keep);
+      if (codes.length) binds[key] = codes;
+    }
+  } catch (err) {}
+}
+
+function actionHeld(action) {
+  const codes = binds[action];
+  if (!codes) return false;
+  for (let i = 0; i < codes.length; i++) if (held[codes[i]]) return true;
+  return false;
+}
+
+function codeIs(action, code) {
+  const codes = binds[action];
+  return !!(codes && codes.indexOf(code) >= 0);
+}
+
 try {
   const stored = parseFloat(localStorage.getItem("rott-look-sens"));
   if (stored >= 0.3 && stored <= 2.5) lookSens = stored;
+  if (localStorage.getItem("rott-music-muted") === "1") musicMuted = true;
+  loadBinds();
 } catch (err) {}
 
 const weps = [
@@ -831,16 +890,20 @@ function paintTitle(g, t) {
   drawText3D(g, "THE HUNT BEGINS", 160, 30, "#d02020", "#400808", 2);
   drawText(g, "SHAREWARE E1A1 TRIBUTE", 160, 48, "#a88858", 1, "center");
 
-  g.fillStyle = "#140a08";
-  g.fillRect(92, 168, 136, 26);
-  g.fillStyle = "#6a4030";
-  g.fillRect(92, 168, 136, 1);
-  g.fillRect(92, 193, 136, 1);
-  g.fillRect(92, 168, 1, 26);
-  g.fillRect(227, 168, 1, 26);
+  function titleBtn(x, y, bw, bh, label, pulse) {
+    g.fillStyle = "#140a08";
+    g.fillRect(x, y, bw, bh);
+    g.fillStyle = "#6a4030";
+    g.fillRect(x, y, bw, 1);
+    g.fillRect(x, y + bh - 1, bw, 1);
+    g.fillRect(x, y, 1, bh);
+    g.fillRect(x + bw - 1, y, 1, bh);
+    drawText(g, label, x + bw / 2, y + 9, pulse ? "#f0d080" : "#c9a050", 1, "center");
+  }
   const pulse = 0.7 + Math.sin(t * 5) * 0.3;
-  drawText(g, "CLICK TO PLAY", 160, 174, pulse > 0.6 ? "#f0d080" : "#c9a050", 1, "center");
-  drawText(g, musicMuted ? "M MUTED" : "M SOUND", 160, 184, "#886848", 1, "center");
+  titleBtn(16, 166, 142, 28, "CLICK TO PLAY", pulse > 0.6);
+  titleBtn(166, 166, 138, 28, "CONTROLS", true);
+  drawText(g, musicMuted ? "M MUTED" : "M SOUND", 160, 156, "#886848", 1, "center");
 }
 
 function paintFace(g, x, y, hurt) {
@@ -928,36 +991,129 @@ function paintHUD(g) {
   }
 }
 
+function codeLabel(code) {
+  if (!code) return "?";
+  if (code.indexOf("Key") === 0) return code.slice(3);
+  if (code.indexOf("Digit") === 0) return code.slice(5);
+  if (code.indexOf("Arrow") === 0) return code.slice(5).toUpperCase();
+  if (code === "Space") return "SPACE";
+  if (code.indexOf("Shift") === 0) return "SHIFT";
+  if (code.indexOf("Control") === 0) return "CTRL";
+  if (code === "Enter" || code === "NumpadEnter") return "ENTER";
+  if (code === "AltLeft" || code === "AltRight") return "ALT";
+  return String(code).toUpperCase().slice(0, 6);
+}
+
+function bindLabel(action) {
+  const codes = binds[action] || [];
+  const seen = [];
+  for (let i = 0; i < codes.length; i++) {
+    const lab = codeLabel(codes[i]);
+    if (seen.indexOf(lab) < 0) seen.push(lab);
+  }
+  if (action === "fire" && seen.indexOf("CLICK") < 0) seen.push("CLICK");
+  return seen.join(" / ") || "?";
+}
+
+function addOptHit(id, x, y, w, h) {
+  optHits.push({ id, x, y, w, h });
+}
+
+function hitOpt(p) {
+  for (let i = optHits.length - 1; i >= 0; i--) {
+    const h = optHits[i];
+    if (p.x >= h.x && p.x <= h.x + h.w && p.y >= h.y && p.y <= h.y + h.h) return h.id;
+  }
+  return null;
+}
+
+function paintBindRow(g, id, label, x, y, w) {
+  const wait = waitingBind === id;
+  g.fillStyle = wait ? "#4a2810" : "#1a1008";
+  g.fillRect(x, y, w, 11);
+  g.fillStyle = wait ? "#c88830" : "#3a2414";
+  g.fillRect(x, y, w, 1);
+  g.fillRect(x, y + 10, w, 1);
+  drawText(g, label, x + 4, y + 2, "#c9a66b", 1);
+  const val = wait ? "PRESS KEY" : bindLabel(id);
+  drawText(g, val, x + w - 4, y + 2, wait ? "#f0d080" : "#e8d0a0", 1, "right");
+  addOptHit(id, x, y, w, 11);
+}
+
 function paintOptions(g) {
-  g.fillStyle = "rgba(8,4,2,0.72)";
+  optHits = [];
+  g.fillStyle = "rgba(8,4,2,0.88)";
   g.fillRect(0, 0, UW, UH);
-  g.fillStyle = "#1a1008";
-  g.fillRect(48, 28, 224, 144);
+  g.fillStyle = "#140a06";
+  g.fillRect(6, 4, 308, 192);
   g.fillStyle = "#6a4030";
-  g.fillRect(48, 28, 224, 2);
-  g.fillRect(48, 170, 224, 2);
-  g.fillRect(48, 28, 2, 144);
-  g.fillRect(270, 28, 2, 144);
+  g.fillRect(6, 4, 308, 2);
+  g.fillRect(6, 194, 308, 2);
+  g.fillRect(6, 4, 2, 192);
+  g.fillRect(312, 4, 2, 192);
   g.fillStyle = "#3a2414";
-  g.fillRect(50, 30, 220, 1);
-  drawText3D(g, "OPTIONS", 160, 40, "#f0c44a", "#6a3a08", 2);
-  drawText(g, "LOOK SENS", 160, 72, "#c9a66b", 1, "center");
-  const x0 = 72, x1 = 248, y = 92, w = x1 - x0;
+  g.fillRect(8, 6, 304, 1);
+  drawText3D(g, "CONTROLS", 160, 8, "#f0c44a", "#6a3a08", 2);
+  drawText(g, "LOOK", 14, 28, "#c9a66b", 1);
+  const x0 = 50, x1 = 250, sy = 28, sw = x1 - x0;
   g.fillStyle = "#2a1810";
-  g.fillRect(x0, y, w, 10);
+  g.fillRect(x0, sy, sw, 10);
   g.fillStyle = "#8a5a28";
-  g.fillRect(x0, y, w, 1);
-  g.fillRect(x0, y + 9, w, 1);
+  g.fillRect(x0, sy, sw, 1);
+  g.fillRect(x0, sy + 9, sw, 1);
   const t = (lookSens - 0.3) / 2.2;
-  const kx = x0 + t * w;
+  const kx = x0 + t * sw;
   g.fillStyle = "#c88830";
-  g.fillRect(x0, y + 3, Math.max(2, kx - x0), 4);
+  g.fillRect(x0, sy + 3, Math.max(2, kx - x0), 4);
   g.fillStyle = "#f0d060";
-  g.fillRect(kx - 3, y - 2, 6, 14);
-  const label = lookSens.toFixed(1) + "X";
-  drawText(g, label, 160, 112, "#f0d080", 1, "center");
-  drawText(g, "ARROWS OR DRAG", 160, 132, "#886848", 1, "center");
-  drawText(g, "ESC BACK", 160, 150, "#e8d0a0", 1, "center");
+  g.fillRect(kx - 3, sy - 2, 6, 14);
+  drawText(g, lookSens.toFixed(1) + "X", 306, 28, "#f0d080", 1, "right");
+  addOptHit("slider", x0 - 4, sy - 4, sw + 8, 18);
+
+  g.fillStyle = musicMuted ? "#401810" : "#1a2010";
+  g.fillRect(12, 44, 88, 12);
+  drawText(g, musicMuted ? "MUSIC OFF" : "MUSIC ON", 16, 46, musicMuted ? "#c06040" : "#80c060", 1);
+  addOptHit("mute", 12, 44, 88, 12);
+  g.fillStyle = "#1a1008";
+  g.fillRect(220, 44, 86, 12);
+  drawText(g, "DEFAULTS", 263, 46, "#c9a66b", 1, "center");
+  addOptHit("reset", 220, 44, 86, 12);
+
+  drawText(g, "WASD AND ARROWS BOTH MOVE", 160, 60, "#886848", 1, "center");
+  paintBindRow(g, "fwd", "FORWARD", 12, 72, 296);
+  paintBindRow(g, "back", "BACK", 12, 84, 296);
+  paintBindRow(g, "left", "LEFT", 12, 96, 296);
+  paintBindRow(g, "right", "RIGHT", 12, 108, 296);
+  paintBindRow(g, "jump", "JUMP", 12, 122, 146);
+  paintBindRow(g, "run", "RUN", 162, 122, 146);
+  paintBindRow(g, "use", "USE", 12, 134, 146);
+  paintBindRow(g, "fire", "FIRE", 162, 134, 146);
+  paintBindRow(g, "reload", "RELOAD", 162, 146, 146);
+
+  g.fillStyle = "#1a1008";
+  g.fillRect(12, 146, 146, 11);
+  g.fillStyle = "#3a2414";
+  g.fillRect(12, 146, 146, 1);
+  g.fillRect(12, 156, 146, 1);
+  drawText(g, "WEPS", 16, 148, "#c9a66b", 1);
+  for (let i = 0; i < 5; i++) {
+    const id = "wep" + (i + 1);
+    const bx = 50 + i * 21;
+    const wait = waitingBind === id;
+    g.fillStyle = wait ? "#4a2810" : "#2a1810";
+    g.fillRect(bx, 147, 19, 9);
+    drawText(g, wait ? "!" : bindLabel(id), bx + 10, 148, wait ? "#f0d080" : "#e8d0a0", 1, "center");
+    addOptHit(id, bx, 147, 19, 9);
+  }
+
+  drawText(g, waitingBind ? "PRESS A KEY  ESC CANCEL" : "CLICK A BIND TO CHANGE", 160, 164, "#886848", 1, "center");
+  g.fillStyle = "#1a1008";
+  g.fillRect(110, 176, 100, 14);
+  g.fillStyle = "#6a4030";
+  g.fillRect(110, 176, 100, 1);
+  g.fillRect(110, 189, 100, 1);
+  drawText(g, "ESC BACK", 160, 179, "#e8d0a0", 1, "center");
+  addOptHit("back", 110, 176, 100, 14);
 }
 
 function setSens(v) {
@@ -965,13 +1121,44 @@ function setSens(v) {
   try { localStorage.setItem("rott-look-sens", String(lookSens)); } catch (err) {}
 }
 
-function optionsSliderAt(x, y) {
-  return x >= 68 && x <= 252 && y >= 84 && y <= 110;
+function sensFromUiX(x) {
+  const t = Math.max(0, Math.min(1, (x - 50) / 200));
+  setSens(0.3 + t * 2.2);
 }
 
-function sensFromUiX(x) {
-  const t = Math.max(0, Math.min(1, (x - 72) / 176));
-  setSens(0.3 + t * 2.2);
+function toggleMute() {
+  musicMuted = !musicMuted;
+  try { localStorage.setItem("rott-music-muted", musicMuted ? "1" : "0"); } catch (err) {}
+  if (musicMuted) {
+    if (window.pauseTitleMusic) window.pauseTitleMusic();
+  } else if (!started && window.playTitleMusic) {
+    window.playTitleMusic();
+  }
+}
+
+function applyBind(action, code) {
+  if (!action || !code || code === "Escape") return;
+  if (code === "F5" || code === "F11" || code === "Tab") return;
+  if (!MOVE_ARROW[action] && code.indexOf("Arrow") === 0) return;
+  for (const key of Object.keys(binds)) {
+    if (key === action) continue;
+    if (MOVE_ARROW[key] === code) continue;
+    binds[key] = binds[key].filter((c) => c !== code);
+  }
+  if (MOVE_ARROW[action]) {
+    binds[action] = code === MOVE_ARROW[action] ? [code] : [code, MOVE_ARROW[action]];
+    if (code !== MOVE_ARROW[action] && binds[action].indexOf(MOVE_ARROW[action]) < 0) {
+      binds[action].push(MOVE_ARROW[action]);
+    }
+  } else if (action === "run" && (code === "ShiftLeft" || code === "ShiftRight")) {
+    binds.run = ["ShiftLeft", "ShiftRight"];
+  } else if (action === "fire" && (code === "ControlLeft" || code === "ControlRight")) {
+    binds.fire = ["ControlLeft", "ControlRight", "Enter", "NumpadEnter"];
+  } else {
+    binds[action] = [code];
+    if (action === "fire" && code === "Enter") binds.fire = ["Enter", "NumpadEnter"];
+  }
+  saveBinds();
 }
 
 function uiPos(e) {
@@ -979,11 +1166,25 @@ function uiPos(e) {
   return { x: (e.clientX - r.left) / r.width * UW, y: (e.clientY - r.top) / r.height * UH };
 }
 
+function titleButtonAt(p) {
+  if (p.y < 166 || p.y > 194) return null;
+  if (p.x >= 16 && p.x <= 158) return "play";
+  if (p.x >= 166 && p.x <= 304) return "controls";
+  return null;
+}
+
+function releaseUiFocus() {
+  try { ui.blur(); } catch (err) {}
+}
+
 function openOptions() {
-  if (!started || optionsOpen) return;
+  if (optionsOpen) return;
+  if (screen === "dead" || screen === "win" || screen === "secret") return;
+  optionsReturn = started ? "play" : "title";
   optionsOpen = true;
   screen = "options";
   slideDrag = false;
+  waitingBind = null;
   mouseDown = false;
   clearKeys();
   ui.style.pointerEvents = "auto";
@@ -994,10 +1195,19 @@ function closeOptions() {
   if (!optionsOpen) return;
   optionsOpen = false;
   slideDrag = false;
-  screen = "play";
+  waitingBind = null;
+  mouseDown = false;
+  clearKeys();
   ui.style.pointerEvents = "none";
-  if (renderer && renderer.domElement) renderer.domElement.focus();
-  lockPointer();
+  releaseUiFocus();
+  screen = optionsReturn === "play" && started ? "play" : (started ? "play" : "title");
+  if (screen === "play") {
+    if (renderer && renderer.domElement) {
+      renderer.domElement.tabIndex = 0;
+      renderer.domElement.focus();
+    }
+    lockPointer();
+  }
 }
 
 function paintEnd(g, title, sub) {
@@ -1970,27 +2180,8 @@ function lockPointer() {
 }
 
 function setKey(e, down) {
+  if (!e || !e.code) return;
   keysDown[e.code] = down;
-  const k = (e.key || "").toLowerCase();
-  if (k === "w" || e.code === "ArrowUp") keysDown.KeyW = down;
-  if (k === "a" || e.code === "ArrowLeft") keysDown.KeyA = down;
-  if (k === "s" || e.code === "ArrowDown") keysDown.KeyS = down;
-  if (k === "d" || e.code === "ArrowRight") keysDown.KeyD = down;
-  if (k === "e") keysDown.KeyE = down;
-  if (k === "r") keysDown.KeyR = down;
-  if (k === "m") keysDown.KeyM = down;
-  if (k === " ") keysDown.Space = down;
-  if (k === "shift") { keysDown.ShiftLeft = down; keysDown.ShiftRight = down; }
-  if (k === "control" || e.code === "ControlLeft" || e.code === "ControlRight") {
-    keysDown.ControlLeft = down;
-    keysDown.ControlRight = down;
-  }
-  if (k === "enter" || e.code === "Enter" || e.code === "NumpadEnter") keysDown.Enter = down;
-  if (k === "1") keysDown.Digit1 = down;
-  if (k === "2") keysDown.Digit2 = down;
-  if (k === "3") keysDown.Digit3 = down;
-  if (k === "4") keysDown.Digit4 = down;
-  if (k === "5") keysDown.Digit5 = down;
 }
 
 function startGame() {
@@ -2039,16 +2230,43 @@ function startGame() {
   showMsg("THE HUNT BEGINS", 1500);
 }
 
+function clickOptions(p) {
+  const id = hitOpt(p);
+  if (!id) return;
+  if (id === "slider") {
+    slideDrag = true;
+    sensFromUiX(p.x);
+    return;
+  }
+  if (id === "mute") { toggleMute(); return; }
+  if (id === "reset") {
+    binds = defaultBinds();
+    saveBinds();
+    setSens(1);
+    waitingBind = null;
+    return;
+  }
+  if (id === "back") { closeOptions(); return; }
+  waitingBind = waitingBind === id ? null : id;
+}
+
 function bind() {
   if (player) player._k = keysDown;
   const onStartClick = (e) => {
     if (e && e.button != null && e.button !== 0) return;
     if (optionsOpen) return;
+    if (!started && screen === "title") {
+      const hit = titleButtonAt(uiPos(e));
+      if (hit === "controls") {
+        openOptions();
+        if (e.preventDefault) e.preventDefault();
+        return;
+      }
+    }
     if (!started) startGame();
     if (!isLocked()) lockPointer();
   };
   window.addEventListener("pointerdown", onStartClick, true);
-  window.addEventListener("click", onStartClick, true);
   document.addEventListener("pointerlockchange", () => { pointerLocked = isLocked(); });
   document.addEventListener("mozpointerlockchange", () => { pointerLocked = isLocked(); });
   window.addEventListener("mousemove", (e) => {
@@ -2064,48 +2282,54 @@ function bind() {
   }, true);
   ui.addEventListener("pointerdown", (e) => {
     if (!optionsOpen) return;
-    const p = uiPos(e);
-    if (optionsSliderAt(p.x, p.y)) {
-      slideDrag = true;
-      sensFromUiX(p.x);
-      e.preventDefault();
-    }
+    clickOptions(uiPos(e));
+    e.preventDefault();
+    releaseUiFocus();
   });
   window.addEventListener("pointerup", () => { slideDrag = false; }, true);
   window.addEventListener("keydown", (e) => {
-    setKey(e, true);
-    if (e.code === "KeyM" && !started) {
-      musicMuted = !musicMuted;
-      if (musicMuted) window.pauseTitleMusic();
-      else window.playTitleMusic();
-    }
-    if (e.code === "Escape") {
+    if (optionsOpen) {
       e.preventDefault();
-      if (optionsOpen) closeOptions();
-      else if (started) openOptions();
+      if (e.code === "Escape") {
+        if (waitingBind) waitingBind = null;
+        else closeOptions();
+        return;
+      }
+      if (waitingBind) {
+        applyBind(waitingBind, e.code);
+        waitingBind = null;
+        return;
+      }
+      if (e.code === "ArrowLeft") setSens(lookSens - 0.1);
+      if (e.code === "ArrowRight") setSens(lookSens + 0.1);
+      if (e.code === "KeyM") toggleMute();
       return;
     }
-    if (optionsOpen) {
-      if (e.code === "ArrowLeft" || e.code === "KeyA") setSens(lookSens - 0.1);
-      if (e.code === "ArrowRight" || e.code === "KeyD") setSens(lookSens + 0.1);
+    setKey(e, true);
+    if (e.code === "KeyM" && !started) toggleMute();
+    if (e.code === "Escape") {
       e.preventDefault();
+      if (screen === "title" || started) openOptions();
       return;
     }
     if (!started) return;
-    if (e.code === "ControlLeft" || e.code === "ControlRight" || e.code === "Enter" || e.code === "NumpadEnter" || e.key === "Enter") {
+    if (codeIs("fire", e.code)) {
       e.preventDefault();
       fire();
     }
-    if (e.code === "KeyE" || e.key === "e" || e.key === "E") use();
-    if (e.code === "KeyR" || e.key === "r" || e.key === "R") startReload();
-    if ((e.code === "Digit1" || e.key === "1") && have[0]) { wepI = 0; swapGun(); }
-    if ((e.code === "Digit2" || e.key === "2") && have[1]) { wepI = 1; swapGun(); }
-    if ((e.code === "Digit3" || e.key === "3") && have[2]) { wepI = 2; swapGun(); }
-    if ((e.code === "Digit4" || e.key === "4") && have[3]) { wepI = 3; swapGun(); }
-    if ((e.code === "Digit5" || e.key === "5") && have[4]) { wepI = 4; swapGun(); }
+    if (codeIs("use", e.code)) use();
+    if (codeIs("reload", e.code)) startReload();
+    if (codeIs("wep1", e.code) && have[0]) { wepI = 0; swapGun(); }
+    if (codeIs("wep2", e.code) && have[1]) { wepI = 1; swapGun(); }
+    if (codeIs("wep3", e.code) && have[2]) { wepI = 2; swapGun(); }
+    if (codeIs("wep4", e.code) && have[3]) { wepI = 3; swapGun(); }
+    if (codeIs("wep5", e.code) && have[4]) { wepI = 4; swapGun(); }
     if (/^(Space|Arrow|KeyW|KeyA|KeyS|KeyD|Shift|Control|Enter)/.test(e.code) || e.key === " ") e.preventDefault();
   }, true);
-  window.addEventListener("keyup", (e) => { setKey(e, false); }, true);
+  window.addEventListener("keyup", (e) => {
+    if (optionsOpen) return;
+    setKey(e, false);
+  }, true);
   window.addEventListener("mousedown", (e) => {
     if (!started || optionsOpen) return;
     if (e.button !== 0) return;
@@ -2145,13 +2369,12 @@ function tick(dt) {
   if (faceHurt > 0) faceHurt -= dt;
   if (landDip > 0) landDip -= dt * 4;
 
-  const k = held;
   let ix = 0, iz = 0;
-  if (k.KeyW || k.ArrowUp) iz -= 1;
-  if (k.KeyS || k.ArrowDown) iz += 1;
-  if (k.KeyA || k.ArrowLeft) ix -= 1;
-  if (k.KeyD || k.ArrowRight) ix += 1;
-  const running = k.ShiftLeft || k.ShiftRight;
+  if (actionHeld("fwd")) iz -= 1;
+  if (actionHeld("back")) iz += 1;
+  if (actionHeld("left")) ix -= 1;
+  if (actionHeld("right")) ix += 1;
+  const running = actionHeld("run");
   const sp = running ? RUN : MOVE;
   const len = Math.hypot(ix, iz) || 1;
   const cy = Math.cos(player.yaw), sy = Math.sin(player.yaw);
@@ -2164,7 +2387,7 @@ function tick(dt) {
     if (player.onGround && stepT > 0.72) { stepT = 0; SFX.step(); }
   }
 
-  if (k.Space && player.onGround) { player.vy = JUMP; player.onGround = false; SFX.jump(); }
+  if (actionHeld("jump") && player.onGround) { player.vy = JUMP; player.onGround = false; SFX.jump(); }
   player.vy -= GRAV * dt;
   wasOnGround = player.onGround;
   player.onGround = false;
@@ -2237,7 +2460,7 @@ function tick(dt) {
     reloading -= dt;
     if (reloading <= 0) finishReload();
   }
-  if ((mouseDown || keysDown.ControlLeft || keysDown.ControlRight || keysDown.Enter) && currentWep().auto) fire();
+  if ((mouseDown || actionHeld("fire")) && currentWep().auto) fire();
 
   for (const e of enemies) updateEnemy(e, dt);
   updateRockets(dt);
@@ -2302,7 +2525,11 @@ function drawUI() {
   else if (screen === "dead") paintEnd(ug, "YOU DIED", "CLICK TO RISE AGAIN");
   else if (screen === "win") paintEnd(ug, "LEVEL COMPLETE", "THE HUNT CONTINUES");
   else if (screen === "secret") paintEnd(ug, "SECRET EXIT", "DELUXE PATH");
-  else if (screen === "options") { paintHUD(ug); paintOptions(ug); }
+  else if (screen === "options") {
+    if (started) paintHUD(ug);
+    else paintTitle(ug, titleT);
+    paintOptions(ug);
+  }
   else paintHUD(ug);
 }
 

@@ -17,11 +17,11 @@ Or open `index.html` directly. A local server is safer for the audio file.
 
 ## Controls
 
-- Click to play (one click). Pointer lock and mouse look start on that click.
-- WASD or arrow keys move, Shift run, Space jump, mouse look. These work even if lock is refused.
-- Left click fire, R reload, 1-5 weapons, E use / pushwall
-- M mutes the title track. There is no MUTE button.
-- ESC opens Options (look sensitivity, saved). ESC again goes back and relocks the mouse.
+- Title has CLICK TO PLAY and CONTROLS. One click on play starts the game and pointer lock.
+- WASD and arrow keys both move. Always. Shift run, Space jump, mouse look. These work even if lock is refused.
+- Left click fire, Ctrl or Enter also fire, R reload, 1-5 weapons, E use / pushwall
+- M mutes the title track. There is no MUTE button. Music on/off is also on the Controls screen.
+- CONTROLS on the title, or ESC in-game, opens a VGA Controls screen: look slider, mute, key legend, click-to-rebind. ESC or BACK returns. Settings persist in localStorage. Closing does not leave a held key or steal focus.
 
 ## Level flow (shareware E1A1 shape)
 
