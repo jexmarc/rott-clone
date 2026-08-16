@@ -64,15 +64,14 @@ const MAP = [
   "#######.1.##########################",
   "#######.1.##########################",
   "########D###########################",
-  "#...............1.................##",
-  "#..^........................^....c##",
-  "#......1...........1.............c##",
-  "#................A...............c##",
-  "#..^........................^.....##",
-  "#............F.F.F................##",
-  "#....1.................1..........##",
-  "#.....................U...........##",
-  "#######g###########D################",
+  "#####.......########################",
+  "#####..1.1..########################",
+  "#####...U...########################",
+  "#####F.....F########################",
+  "#####.......########################",
+  "#####.......########################",
+  "########D###########################",
+  "#######g.##########D################",
   "#....1............#..^^....1......##",
   "#..^^....#####....#...............##",
   "#........#...#....#..F.F..........##",
@@ -2049,39 +2048,43 @@ function addTracer(a, b) {
 function makeRocketMesh(kind) {
   const g = new THREE.Group();
   const fat = kind === "bazooka";
+  const chunky = kind === "drunk" || kind === "heat";
+  const br = fat ? 0.32 : chunky ? 0.3 : 0.16;
+  const br2 = fat ? 0.36 : chunky ? 0.34 : 0.18;
+  const blen = fat ? 1.45 : chunky ? 1.28 : 0.85;
   const bodyCol = kind === "drunk" ? 0xffb030 : kind === "heat" ? 0xff4010 : 0xffd060;
   const body = new THREE.Mesh(
-    new THREE.CylinderGeometry(fat ? 0.32 : 0.16, fat ? 0.36 : 0.18, fat ? 1.45 : 0.85, 8),
+    new THREE.CylinderGeometry(br, br2, blen, 8),
     new THREE.MeshBasicMaterial({ color: bodyCol })
   );
   body.rotation.x = Math.PI / 2;
   const nose = new THREE.Mesh(
-    new THREE.ConeGeometry(fat ? 0.36 : 0.18, fat ? 0.48 : 0.28, 8),
+    new THREE.ConeGeometry(chunky || fat ? 0.36 : 0.18, chunky || fat ? 0.48 : 0.28, 8),
     new THREE.MeshBasicMaterial({ color: kind === "heat" ? 0xff2200 : 0xffee80 })
   );
   nose.rotation.x = Math.PI / 2;
-  nose.position.z = fat ? -0.9 : -0.52;
-  const fin = new THREE.Mesh(new THREE.BoxGeometry(fat ? 0.72 : 0.38, 0.08, 0.28), new THREE.MeshBasicMaterial({ color: 0x8a5020 }));
-  fin.position.z = fat ? 0.48 : 0.28;
+  nose.position.z = fat ? -0.9 : chunky ? -0.82 : -0.52;
+  const fin = new THREE.Mesh(new THREE.BoxGeometry(fat || chunky ? 0.72 : 0.38, 0.08, 0.28), new THREE.MeshBasicMaterial({ color: 0x8a5020 }));
+  fin.position.z = fat ? 0.48 : chunky ? 0.42 : 0.28;
   const glow = new THREE.Mesh(
-    new THREE.SphereGeometry(fat ? 0.28 : 0.14, 6, 6),
+    new THREE.SphereGeometry(fat || chunky ? 0.28 : 0.14, 6, 6),
     new THREE.MeshBasicMaterial({ color: kind === "drunk" ? 0xff7722 : kind === "heat" ? 0xff2200 : 0xffaa33 })
   );
-  glow.position.z = fat ? 0.72 : 0.42;
+  glow.position.z = fat ? 0.72 : chunky ? 0.64 : 0.42;
   const flame = new THREE.Mesh(
-    new THREE.ConeGeometry(fat ? 0.26 : 0.12, fat ? 0.7 : 0.34, 6),
-    new THREE.MeshBasicMaterial({ color: kind === "heat" ? 0xff4410 : 0xffcc44 })
+    new THREE.ConeGeometry(fat || chunky ? 0.26 : 0.12, fat || chunky ? 0.7 : 0.34, 6),
+    new THREE.MeshBasicMaterial({ color: kind === "heat" ? 0xff4410 : kind === "drunk" ? 0xff9922 : 0xffcc44 })
   );
   flame.rotation.x = -Math.PI / 2;
-  flame.position.z = fat ? 1.05 : 0.58;
-  const lite = new THREE.PointLight(kind === "heat" ? 0xff3311 : 0xffaa44, fat ? 2.4 : 1.2, fat ? 10 : 6, 1.2);
-  lite.position.z = fat ? 0.4 : 0.2;
+  flame.position.z = fat ? 1.05 : chunky ? 0.96 : 0.58;
+  const lite = new THREE.PointLight(kind === "heat" ? 0xff3311 : kind === "drunk" ? 0xff8800 : 0xffaa44, fat || chunky ? 2.4 : 1.2, fat || chunky ? 10 : 6, 1.2);
+  lite.position.z = fat || chunky ? 0.4 : 0.2;
   g.add(body, nose, fin, glow, flame, lite);
   return g;
 }
 
 function spawnRocket(kind, origin, dir, wobble) {
-  const speed = kind === "bazooka" ? 10.5 : kind === "heat" ? 14 : 12;
+  const speed = kind === "bazooka" ? 10.5 : kind === "heat" ? 8.2 : kind === "drunk" ? 7.4 : 12;
   const mesh = makeRocketMesh(kind);
   mesh.position.copy(origin);
   mesh.lookAt(origin.clone().add(dir));
@@ -2295,7 +2298,8 @@ function markHitDir(fromX, fromZ) {
 }
 
 function hurtPlayer(n, fromX, fromZ) {
-  if (!player || optionsOpen || invulnT > 0 || timeAlive < 3.2) return;
+  if (!player || optionsOpen) return;
+  if (inCourtyard(player.x, player.z) && (invulnT > 0 || timeAlive < 3.2)) return;
   const soak = Math.min(player.armor, n * 0.6);
   player.armor -= soak;
   player.hp -= (n - soak);
@@ -2303,6 +2307,7 @@ function hurtPlayer(n, fromX, fromZ) {
   faceHurt = 0.45;
   markHitDir(fromX, fromZ);
   SFX.pain();
+  if (window.console) console.log("[ROTT] HP", player.hp | 0);
   if (player.hp <= 0) die();
 }
 
@@ -2388,6 +2393,28 @@ function use() {
           if (Math.hypot(e.x - player.x, e.z - player.z) < 14) {
             e.state = "shoot";
             e.nextShot = 0.16;
+          }
+        }
+      }
+      if (d.hallOut && player && player.z < d.z + 0.9) {
+        lookFreeze = 0;
+        invulnT = 0;
+        player.x = d.x;
+        player.z = d.z + 2.15;
+        player.y = 0;
+        player.vy = 0;
+        lastSafe.x = player.x;
+        lastSafe.y = 0;
+        lastSafe.z = player.z;
+        player.yaw = Math.PI;
+        player.pitch = 0.06;
+        applyLook();
+        if (window.console) console.log("[ROTT] ROOM", player.x.toFixed(2), player.z.toFixed(2));
+        for (const e of enemies) {
+          if (e.dead || e.opener || inCourtyard(e.x, e.z)) continue;
+          if (e.z > d.z) {
+            e.state = "shoot";
+            e.nextShot = 0.12;
           }
         }
       }
@@ -2856,13 +2883,13 @@ function updateEnemy(e, dt) {
         e.nextShot = 0.35;
       } else {
         const chip = !!e.opener;
-        e.nextShot = e.tough ? 0.55 : (chip ? 2.1 : 0.95);
+        e.nextShot = e.tough ? 0.55 : (chip ? 2.1 : 0.7);
         SFX.enemyShot();
         const origin = new THREE.Vector3(e.x, 1.3, e.z);
         const dest = new THREE.Vector3(player.x, player.y + 1.3, player.z);
         addTracer(origin, dest);
-        const acc = e.tough ? 0.7 : (chip ? 0.16 : 0.5);
-        const dmg = e.tough ? 11 : (chip ? 2 : 7);
+        const acc = e.tough ? 0.7 : (chip ? 0.16 : 0.92);
+        const dmg = e.tough ? 11 : (chip ? 2 : (e.room ? 9 : 7));
         if (Math.random() < acc) hurtPlayer(dmg, e.x, e.z);
       }
     }
@@ -2882,6 +2909,9 @@ function buildLevel() {
   const mBanner = mat(bannerTex);
   const mCeil = new THREE.MeshLambertMaterial({ color: 0x1a120c, flatShading: true });
   const mHallCeil = new THREE.MeshLambertMaterial({ color: 0x8a6820, emissive: 0x3a2808, flatShading: true });
+  const mMonkCeil = new THREE.MeshLambertMaterial({ color: 0x1a2418, emissive: 0x08140c, flatShading: true });
+  const mMonkFloor = new THREE.MeshLambertMaterial({ color: 0x5a2018, emissive: 0x220808, flatShading: true });
+  const mMonkWall = mat(darkTex, 0x889090, 0x100808);
   const mGold = new THREE.MeshLambertMaterial({ color: 0xe0b020, emissive: 0x442200, flatShading: true });
   const mSilver = new THREE.MeshLambertMaterial({ color: 0xb8c0c8, emissive: 0x111122, flatShading: true });
   const mFire = new THREE.MeshLambertMaterial({ color: 0xff6622, emissive: 0xaa2200, flatShading: true });
@@ -2933,6 +2963,20 @@ function buildLevel() {
   const hallFill2 = new THREE.PointLight(0xff8040, 0.7, 9, 1.4);
   hallFill2.position.set(worldX(8), 3.0, worldZ(11));
   scene.add(hallFill2);
+  const roomFill = new THREE.PointLight(0xff6030, 0.95, 14, 1.2);
+  roomFill.position.set(worldX(8), 3.1, worldZ(14));
+  scene.add(roomFill);
+  const roomFill2 = new THREE.PointLight(0x40a060, 0.55, 12, 1.4);
+  roomFill2.position.set(worldX(8), 2.8, worldZ(17));
+  scene.add(roomFill2);
+  for (let r = 13; r <= 18; r++) {
+    const runner = new THREE.Mesh(
+      new THREE.BoxGeometry(1.15, 0.05, TILE),
+      new THREE.MeshBasicMaterial({ color: 0x8a1820 })
+    );
+    runner.position.set(worldX(8), 0.04, worldZ(r));
+    scene.add(runner);
+  }
   for (const r of [9, 10, 11]) {
     const bowl = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.22, 1.8, 6), new THREE.MeshLambertMaterial({ color: 0x6a3a18, emissive: 0x331104, flatShading: true }));
     bowl.position.set(worldX(7) + 0.7, 1.0, worldZ(r));
@@ -2962,11 +3006,13 @@ function buildLevel() {
       if (ch === ",") y0 = -2.2;
       if (ch === "c") y0 = CAT_H;
       const outdoor = r <= 7 && ch !== "#" && ch !== " " && ch !== ".";
-      const fl = new THREE.Mesh(new THREE.BoxGeometry(TILE, 0.22, TILE), outdoor ? mDirt : (ch === "c" ? mMetal : (ch === "," ? mDark : mFloor)));
+      const monk = r >= 13 && r <= 18;
+      const fl = new THREE.Mesh(new THREE.BoxGeometry(TILE, 0.22, TILE), outdoor ? mDirt : (ch === "c" ? mMetal : (ch === "," ? mDark : (monk ? mMonkFloor : mFloor))));
       fl.position.set(x, y0 - 0.11, z);
       scene.add(fl);
       if (!outdoor && ch !== "^") {
-        const ceil = new THREE.Mesh(new THREE.BoxGeometry(TILE, 0.16, TILE), r >= 8 && r <= 12 ? mHallCeil : mCeil);
+        const ceilMat = r >= 8 && r <= 12 ? mHallCeil : (monk ? mMonkCeil : mCeil);
+        const ceil = new THREE.Mesh(new THREE.BoxGeometry(TILE, 0.16, TILE), ceilMat);
         ceil.position.set(x, WALL_H + 0.18, z);
         scene.add(ceil);
       }
@@ -2978,8 +3024,9 @@ function buildLevel() {
       if (cell(c, r) !== "#") continue;
       const x = worldX(c), z = worldZ(r);
       const indoorN = !isWall(cell(c, r + 1)) && cell(c, r + 1) !== "~" && cell(c, r + 1) !== "S" && cell(c, r + 1) !== "t";
+      const monkN = (r + 1) >= 13 && (r + 1) <= 18 && indoorN;
       const sunken = cell(c, r + 1) === "," || cell(c, r - 1) === ",";
-      boxAt(x, sunken ? -2.2 : 0, z, TILE, sunken ? WALL_H + 2.2 : WALL_H, TILE, sunken ? mDark : (indoorN ? mBlock : mStone), true);
+      boxAt(x, sunken ? -2.2 : 0, z, TILE, sunken ? WALL_H + 2.2 : WALL_H, TILE, sunken ? mDark : (monkN ? mMonkWall : (indoorN ? mBlock : mStone)), true);
     }
   }
 
@@ -3002,8 +3049,16 @@ function buildLevel() {
       if (ch === "1") {
         const n = enemies.length;
         spawnEnemy(x, 0, z, false);
-        if (r <= 7 && enemies.length > n && !enemies.some((en) => en.opener)) {
-          markOpener(enemies[enemies.length - 1]);
+        if (enemies.length > n) {
+          const spawned = enemies[enemies.length - 1];
+          if (r <= 7 && !enemies.some((en) => en.opener)) markOpener(spawned);
+          if (r >= 13 && r <= 18) {
+            spawned.room = true;
+            spawned.body.material = new THREE.MeshLambertMaterial({ color: 0x2a4a3a, emissive: 0x0a1810, flatShading: true });
+            const sash = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.2, 0.36), new THREE.MeshBasicMaterial({ color: 0x20c050 }));
+            sash.position.y = 1.08;
+            spawned.group.add(sash);
+          }
         }
       }
       if (ch === "2") spawnEnemy(x, 0, z, true);
@@ -3019,11 +3074,12 @@ function buildLevel() {
       if (ch === "N") makePickup(x, -1.6, z, "drunk", new THREE.MeshLambertMaterial({ color: 0x8a6a20, emissive: 0x332200, flatShading: true }), "DRUNK MISSILES");
       if (ch === "D" || ch === "g" || ch === "l" || ch === "Q") {
         const kind = ch === "g" ? "gold" : ch === "l" ? "silver" : ch === "Q" ? "timed" : "free";
+        const hallOut = kind === "free" && r === 12;
         const doorMat = kind === "gold"
           ? (r <= 8 ? new THREE.MeshBasicMaterial({ color: 0xffc030 }) : mGold)
-          : kind === "silver" ? mSilver : mMetal;
-        const dm = boxAt(x, 0, z, TILE * 0.92, WALL_H - 0.12, kind === "gold" && r <= 8 ? 0.42 : 0.32, doorMat, true);
-        doors.push({ x, z, kind, mesh: dm, open: false, solid: solids[solids.length - 1] });
+          : kind === "silver" ? mSilver : (hallOut ? new THREE.MeshBasicMaterial({ color: 0x70a0a0 }) : mMetal);
+        const dm = boxAt(x, 0, z, TILE * 0.92, WALL_H - 0.12, (kind === "gold" && r <= 8) || hallOut ? 0.42 : 0.32, doorMat, true);
+        doors.push({ x, z, kind, mesh: dm, open: false, solid: solids[solids.length - 1], hallOut });
         if (kind === "timed") timedDoor = doors[doors.length - 1];
         if (kind === "gold" && r <= 8) {
           const tag = makeLabel("GOLD");
@@ -3031,6 +3087,14 @@ function buildLevel() {
           scene.add(tag);
           const lit = new THREE.PointLight(0xffc040, 0.85, 11, 1.5);
           lit.position.set(x, 3.2, z - 1.2);
+          scene.add(lit);
+        }
+        if (hallOut) {
+          const tag = makeLabel("HALL");
+          tag.position.set(x, 3.15, z - 0.35);
+          scene.add(tag);
+          const lit = new THREE.PointLight(0x80c0c0, 0.7, 10, 1.5);
+          lit.position.set(x, 3.1, z + 1.1);
           scene.add(lit);
         }
       }
@@ -3063,10 +3127,11 @@ function buildLevel() {
     boxAt(worldX(c), 0, worldZ(r), 0.72, 0.85, 0.72, mat(crateTex), true);
   }
 
-  for (const [c, r] of [[18, 14], [10, 18], [22, 24]]) {
+  for (const [c, r] of [[5, 15], [11, 16], [22, 24]]) {
     const x = worldX(c), z = worldZ(r);
     const b = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 2.1), mBanner);
-    b.position.set(x, 2.4, z + 1.52);
+    b.position.set(x + (c < 8 ? 1.55 : -1.55), 2.4, z);
+    b.rotation.y = c < 8 ? Math.PI / 2 : -Math.PI / 2;
     scene.add(b);
   }
 
@@ -3079,7 +3144,6 @@ function buildLevel() {
   }
 
   const extraPads = [
-    [8, 14, 0], [26, 14, 0], [8, 17, 0], [26, 17, 0],
     [12, 23, 0], [22, 23, 0], [8, 30, -2.2], [16, 32, -2.2],
     [10, 35, 0], [20, 37, 0], [28, 26, 0]
   ];
@@ -3398,6 +3462,20 @@ function tick(dt) {
   }
   timeAlive += dt;
   if (goldDoorOpen || playerRow() > 7) lookFreeze = 0;
+  if (scene && scene.fog) {
+    const pr = playerRow();
+    if (pr >= 13 && pr <= 19) {
+      scene.fog.near = 8;
+      scene.fog.far = 40;
+      scene.fog.color.setHex(0x1a120c);
+      scene.background.setHex(0x140e0a);
+    } else {
+      scene.fog.near = 110;
+      scene.fog.far = 220;
+      scene.fog.color.setHex(0x4a2814);
+      scene.background.setHex(0x3a1c0c);
+    }
+  }
   if (lookFreeze > 0) {
     lookFreeze -= dt;
     player.yaw = openYaw;
