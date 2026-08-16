@@ -54,8 +54,8 @@ const MAP = [
   "#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~##",
   "#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~##",
   "#~~~~~~~S~~~~~~~~~~~~~~~~~~~~~~~~~##",
-  "#~~~~~~~~~~~~~~~~~~~~~1~t~~R~~M~~~##",
-  "#~~~~~~~~~Z~~~~~~~~~~U~~~~~~~B~~~~##",
+  "#~~~~~~~~~~~~~~H~~~1~~~~t~~R~~M~~~##",
+  "#~~~~~~~~~Z~~~^~~~~~~U~~~~~~~B~~~~##",
   "#~~~~~~~~~~~~~~~~~~~~~T~~~~~~PQY.*##",
   "###########D########################",
   "#...........R.U.^..1..............##",
@@ -173,6 +173,8 @@ let tauntT = 0;
 let msg = "";
 let msgT = 0;
 let dmgT = 0;
+let hitCueT = 0;
+let hitCueAng = 0;
 let bob = 0;
 let timeAlive = 0;
 let timedDoor = null;
@@ -237,10 +239,24 @@ function loadBinds() {
       if (keep && codes.indexOf(keep) < 0) codes.push(keep);
       if (codes.length) binds[key] = codes;
     }
+    binds.fire = keepFireKeys(binds.fire);
   } catch (err) {}
 }
 
+const FIRE_CODES = ["ControlLeft", "ControlRight", "Enter", "NumpadEnter"];
+
+function keepFireKeys(list) {
+  const out = Array.isArray(list) ? list.slice() : [];
+  for (let i = 0; i < FIRE_CODES.length; i++) {
+    if (out.indexOf(FIRE_CODES[i]) < 0) out.push(FIRE_CODES[i]);
+  }
+  return out;
+}
+
 function actionHeld(action) {
+  if (action === "fire") {
+    if (held.ControlLeft || held.ControlRight || held.Enter || held.NumpadEnter) return true;
+  }
   const codes = binds[action];
   if (!codes) return false;
   for (let i = 0; i < codes.length; i++) if (held[codes[i]]) return true;
@@ -249,8 +265,19 @@ function actionHeld(action) {
 }
 
 function codeIs(action, code) {
+  if (action === "fire" && FIRE_CODES.indexOf(code) >= 0) return true;
   const codes = binds[action];
   return !!(codes && codes.indexOf(code) >= 0);
+}
+
+function isFireEvent(e) {
+  const key = (e.key || "").toLowerCase();
+  if (key === "control" || key === "enter") return true;
+  return codeIs("fire", e.code);
+}
+
+function fireHeld() {
+  return mouseDown || actionHeld("fire");
 }
 
 try {
@@ -1035,6 +1062,38 @@ function paintFace(g, x, y, hurt) {
   else g.fillRect(x + 11, y + 18, 6, 2);
 }
 
+function paintHitCue(g) {
+  if (hitCueT <= 0) return;
+  const a = Math.min(1, hitCueT * 2.2);
+  const cx = 160, cy = 84;
+  const ox = Math.sin(hitCueAng) * 38;
+  const oy = -Math.cos(hitCueAng) * 32;
+  g.save();
+  g.translate(cx + ox, cy + oy);
+  g.rotate(hitCueAng);
+  g.fillStyle = "rgba(210,16,16," + (0.3 + a * 0.6) + ")";
+  g.beginPath();
+  g.moveTo(0, -13);
+  g.lineTo(11, 9);
+  g.lineTo(0, 3);
+  g.lineTo(-11, 9);
+  g.closePath();
+  g.fill();
+  g.restore();
+  const side = Math.sin(hitCueAng);
+  if (side > 0.2) {
+    g.fillStyle = "rgba(170,0,0," + (a * 0.32 * side) + ")";
+    g.fillRect(276, 0, 44, 168);
+  } else if (side < -0.2) {
+    g.fillStyle = "rgba(170,0,0," + (a * 0.32 * -side) + ")";
+    g.fillRect(0, 0, 44, 168);
+  }
+  if (Math.cos(hitCueAng) < -0.35) {
+    g.fillStyle = "rgba(170,0,0," + (a * 0.28) + ")";
+    g.fillRect(0, 148, 320, 20);
+  }
+}
+
 function paintHUD(g) {
   g.clearRect(0, 0, UW, UH);
   if (dmgT > 0) {
@@ -1046,6 +1105,12 @@ function paintHUD(g) {
     g.fillRect(40, 28, 240, 16);
     drawText(g, msg, 160, 31, "#f0c040", 1, "center");
   }
+  if (started && !optionsOpen && !isLocked()) {
+    g.fillStyle = "rgba(0,0,0,0.5)";
+    g.fillRect(70, 46, 180, 14);
+    drawText(g, "CLICK TO LOOK", 160, 49, "#f0d060", 1, "center");
+  }
+  paintHitCue(g);
   g.fillStyle = "#1a0c08";
   g.fillRect(0, 168, 320, 32);
   g.fillStyle = "#5a3820";
@@ -1125,7 +1190,7 @@ function bindLabel(action) {
     const lab = codeLabel(codes[i]);
     if (seen.indexOf(lab) < 0) seen.push(lab);
   }
-  if (action === "fire" && seen.indexOf("CLICK") < 0) seen.push("CLICK");
+  if (action === "fire") return "CTRL ENTER CLICK";
   return seen.join(" / ") || "?";
 }
 
@@ -1266,11 +1331,10 @@ function applyBind(action, code) {
     }
   } else if (action === "run" && (code === "ShiftLeft" || code === "ShiftRight")) {
     binds.run = ["ShiftLeft", "ShiftRight"];
-  } else if (action === "fire" && (code === "ControlLeft" || code === "ControlRight")) {
-    binds.fire = ["ControlLeft", "ControlRight", "Enter", "NumpadEnter"];
+  } else if (action === "fire") {
+    binds.fire = keepFireKeys([code]);
   } else {
     binds[action] = [code];
-    if (action === "fire" && code === "Enter") binds.fire = ["Enter", "NumpadEnter"];
   }
   saveBinds();
 }
@@ -1314,8 +1378,9 @@ function closeOptions(viaClick) {
   slideDrag = false;
   waitingBind = null;
   mouseDown = false;
-  suppressShot = 1;
+  suppressShot = viaClick ? 1 : 0;
   wantLock = false;
+  ignoreUnlock = false;
   clearKeys();
   ui.style.pointerEvents = "none";
   releaseUiFocus();
@@ -1329,7 +1394,7 @@ function closeOptions(viaClick) {
     if (viaClick) {
       lockPointer();
     } else {
-      showMsg("CLICK TO LOOK", 1400);
+      showMsg("CLICK TO LOOK", 2400);
     }
   }
 }
@@ -1360,6 +1425,29 @@ function makePickup(x, y, z, kind, material, label) {
   pickups.push({ x, y, z, kind, mesh, label, taken: false });
 }
 
+function makeMonkMeal(x, y, z, yard) {
+  const group = new THREE.Group();
+  const loaf = new THREE.Mesh(
+    new THREE.BoxGeometry(yard ? 0.88 : 0.5, yard ? 0.4 : 0.32, yard ? 0.64 : 0.42),
+    new THREE.MeshLambertMaterial({ color: 0x2ccc48, emissive: yard ? 0x1a6a22 : 0x113311, flatShading: true })
+  );
+  group.add(loaf);
+  if (yard) {
+    const plate = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.62, 0.66, 0.08, 8),
+      new THREE.MeshLambertMaterial({ color: 0xe8d080, emissive: 0x665518, flatShading: true })
+    );
+    plate.position.y = -0.22;
+    group.add(plate);
+    const light = new THREE.PointLight(0x66ff88, 2.8, 16, 1.1);
+    light.position.y = 0.45;
+    group.add(light);
+  }
+  group.position.set(x, y, z);
+  scene.add(group);
+  pickups.push({ x, y, z, kind: "health", mesh: group, label: "MONK MEAL", taken: false });
+}
+
 function makeLabel(text) {
   const c = document.createElement("canvas");
   c.width = 128; c.height = 32;
@@ -1381,19 +1469,44 @@ function makeLabel(text) {
   return new THREE.Mesh(new THREE.PlaneGeometry(2.2, 0.55), new THREE.MeshBasicMaterial({ map: t }));
 }
 
-function placePad(x, y, z) {
+function placePad(x, y, z, yard) {
   const s = findCell("S");
-  if (Math.hypot(x - worldX(s.c), z - worldZ(s.r)) < TILE * 8) return;
+  if (Math.hypot(x - worldX(s.c), z - worldZ(s.r)) < TILE * 2.2) return;
   const group = new THREE.Group();
-  const base = new THREE.Mesh(new THREE.CylinderGeometry(1.12, 1.18, 0.16, 12), mat(metalTex, 0x665544));
-  const disk = new THREE.Mesh(new THREE.CylinderGeometry(1.05, 1.08, 0.1, 12), mat(padTex, 0xffffff, 0x221100));
-  disk.position.y = 0.1;
-  const nub = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.28, 0.08, 8), new THREE.MeshLambertMaterial({ color: 0xe0a020, emissive: 0x553300, flatShading: true }));
-  nub.position.y = 0.16;
+  const rad = yard ? 1.48 : 1.12;
+  const base = new THREE.Mesh(new THREE.CylinderGeometry(rad, rad + 0.06, yard ? 0.22 : 0.16, 12), mat(metalTex, 0x665544));
+  const disk = new THREE.Mesh(
+    new THREE.CylinderGeometry(rad - 0.08, rad - 0.04, 0.12, 12),
+    mat(padTex, 0xffffff, yard ? 0x553300 : 0x221100)
+  );
+  disk.position.y = yard ? 0.14 : 0.1;
+  const nub = new THREE.Mesh(
+    new THREE.CylinderGeometry(yard ? 0.32 : 0.22, yard ? 0.4 : 0.28, yard ? 0.16 : 0.08, 8),
+    new THREE.MeshLambertMaterial({ color: 0xf0b028, emissive: yard ? 0xaa5500 : 0x553300, flatShading: true })
+  );
+  nub.position.y = yard ? 0.26 : 0.16;
   group.add(base, disk, nub);
+  if (yard) {
+    const ring = new THREE.Mesh(
+      new THREE.TorusGeometry(1.22, 0.07, 6, 16),
+      new THREE.MeshLambertMaterial({ color: 0xffc040, emissive: 0x884400, flatShading: true })
+    );
+    ring.rotation.x = Math.PI / 2;
+    ring.position.y = 0.28;
+    group.add(ring);
+    const column = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.12, 0.22, 2.4, 6),
+      new THREE.MeshBasicMaterial({ color: 0xffb040, transparent: true, opacity: 0.35 })
+    );
+    column.position.y = 1.4;
+    group.add(column);
+    const light = new THREE.PointLight(0xffaa33, 3.4, 22, 1.05);
+    light.position.y = 1.6;
+    group.add(light);
+  }
   group.position.set(x, y, z);
   scene.add(group);
-  pads.push({ x, z, y, group, disk, nub, cool: 0, flash: 0 });
+  pads.push({ x, z, y, group, disk, nub, cool: 0, flash: 0, yard: !!yard });
 }
 
 function nearSpawn(x, z) {
@@ -1435,6 +1548,7 @@ function spawnEnemy(x, y, z, tough) {
   enemies.push({
     group: g, body, head, x, y, z, vx: 0, vz: 0,
     hp: tough ? 150 : 72, max: tough ? 150 : 72, tough,
+    opener: false,
     state: "idle", nextShot: 1.35 + Math.random(), dead: false, hurt: 0
   });
 }
@@ -1881,7 +1995,7 @@ function explode(x, y, z, dmg, radius) {
     if (!b.dead && Math.hypot(b.x - x, b.z - z) < radius * 0.75) boomBarrel(b);
   }
   const pd = Math.hypot(player.x - x, player.z - z);
-  if (pd < radius * 0.75) hurtPlayer(42 * (1 - pd / (radius * 0.75)));
+  if (pd < radius * 0.75) hurtPlayer(42 * (1 - pd / (radius * 0.75)), x, z);
 }
 
 function boomBarrel(b) {
@@ -1919,13 +2033,26 @@ function killEnemy(e, gibby) {
   }
 }
 
-function hurtPlayer(n) {
+function markHitDir(fromX, fromZ) {
+  if (!player || fromX == null || fromZ == null) return;
+  const lookX = -Math.sin(player.yaw);
+  const lookZ = -Math.cos(player.yaw);
+  const hx = fromX - player.x;
+  const hz = fromZ - player.z;
+  const fwd = hx * lookX + hz * lookZ;
+  const right = hx * lookZ - hz * lookX;
+  hitCueAng = Math.atan2(right, fwd);
+  hitCueT = 0.58;
+}
+
+function hurtPlayer(n, fromX, fromZ) {
   if (!player || optionsOpen || invulnT > 0 || timeAlive < 3.2) return;
   const soak = Math.min(player.armor, n * 0.6);
   player.armor -= soak;
   player.hp -= (n - soak);
   dmgT = 0.38;
   faceHurt = 0.45;
+  markHitDir(fromX, fromZ);
   SFX.pain();
   if (player.hp <= 0) die();
 }
@@ -2046,6 +2173,7 @@ function resetPlayer() {
   gunRecoil = 0;
   timeAlive = 0;
   invulnT = 3.2;
+  hitCueT = 0;
   if (gunRoot) swapGun();
 }
 
@@ -2059,21 +2187,42 @@ function blockedCell(x, z) {
   return losBlock(cell(c, r));
 }
 
+function doorClosedAt(c, r) {
+  const wx = worldX(c), wz = worldZ(r);
+  for (let i = 0; i < doors.length; i++) {
+    const d = doors[i];
+    if (Math.abs(d.x - wx) < 0.4 && Math.abs(d.z - wz) < 0.4) return !d.open;
+  }
+  return true;
+}
+
+function pushClosedAt(c, r) {
+  const wx = worldX(c), wz = worldZ(r);
+  for (let i = 0; i < pushwalls.length; i++) {
+    const p = pushwalls[i];
+    if (Math.abs(p.x - wx) < 0.4 && Math.abs(p.z - wz) < 0.4) return !p.pushed;
+  }
+  return true;
+}
+
+function blocksSight(x, z) {
+  const c = Math.round(x / TILE + W / 2);
+  const r = Math.round(z / TILE + 2);
+  const ch = cell(c, r);
+  if (isWall(ch) || ch === "t") return true;
+  if (ch === "D" || ch === "g" || ch === "l" || ch === "Q") return doorClosedAt(c, r);
+  if (ch === "P") return pushClosedAt(c, r);
+  return false;
+}
+
 function hasLOS(e) {
-  let c0 = Math.round(e.x / TILE + W / 2);
-  let r0 = Math.round(e.z / TILE + 2);
-  const c1 = Math.round(player.x / TILE + W / 2);
-  const r1 = Math.round(player.z / TILE + 2);
-  const dc = Math.abs(c1 - c0), dr = Math.abs(r1 - r0);
-  const sc = c0 < c1 ? 1 : -1, sr = r0 < r1 ? 1 : -1;
-  let err = dc - dr;
-  let c = c0, r = r0;
-  while (c !== c1 || r !== r1) {
-    const e2 = 2 * err;
-    if (e2 > -dr) { err -= dr; c += sc; }
-    if (e2 < dc) { err += dc; r += sr; }
-    if (c === c1 && r === r1) break;
-    if (losBlock(cell(c, r))) return false;
+  const dx = player.x - e.x, dz = player.z - e.z;
+  const dist = Math.hypot(dx, dz);
+  if (dist < 0.5) return true;
+  const steps = Math.max(6, Math.ceil(dist / 0.4));
+  for (let i = 1; i < steps; i++) {
+    const t = i / steps;
+    if (blocksSight(e.x + dx * t, e.z + dz * t)) return false;
   }
   return true;
 }
@@ -2087,11 +2236,10 @@ function updateEnemy(e, dt) {
   const dx = player.x - e.x, dz = player.z - e.z;
   const dist = Math.hypot(dx, dz) || 0.001;
   if (invulnT > 0 || timeAlive < 3.2) return;
-  if (nearSpawn(e.x, e.z) || nearSpawn(player.x, player.z)) return;
-  const los = dist < 20 && hasLOS(e);
-  if (los) e.state = dist < 9 ? "shoot" : "chase";
-  else if (e.state === "shoot") e.state = "chase";
-  else if (e.state === "chase" && dist > 28) e.state = "idle";
+  if (timeAlive < 20 && !e.opener) return;
+  const los = dist < 22 && hasLOS(e);
+  if (los) e.state = dist < 11 ? "shoot" : "chase";
+  else if (e.state === "shoot" || e.state === "chase") e.state = "idle";
   const sp = (e.tough ? 4.4 : 3.6) * dt;
   function walk(wx, wz) {
     const nx = e.x + wx, nz = e.z + wz;
@@ -2104,13 +2252,15 @@ function updateEnemy(e, dt) {
     if (dist < 4.2) walk(-(dx / dist) * sp, -(dz / dist) * sp);
     e.nextShot -= dt;
     if (e.nextShot <= 0 && los && dist < 16) {
-      e.nextShot = e.tough ? 0.42 : 0.7;
+      const chip = e.opener || timeAlive < 24;
+      e.nextShot = e.tough ? 0.55 : (chip ? 1.2 : 0.9);
       SFX.enemyShot();
       const origin = new THREE.Vector3(e.x, 1.3, e.z);
       const dest = new THREE.Vector3(player.x, player.y + 1.3, player.z);
       addTracer(origin, dest);
-      const acc = e.tough ? 0.78 : 0.62;
-      if (Math.random() < acc) hurtPlayer(e.tough ? 13 : 8);
+      const acc = e.tough ? 0.7 : (chip ? 0.42 : 0.55);
+      const dmg = e.tough ? 11 : (chip ? 5 : 7);
+      if (Math.random() < acc) hurtPlayer(dmg, e.x, e.z);
     }
   }
   e.group.position.set(e.x, e.y, e.z);
@@ -2229,8 +2379,12 @@ function buildLevel() {
         light.position.set(x, 2.5, z);
         scene.add(light);
       }
-      if (ch === "^") placePad(x, 0, z);
-      if (ch === "1") spawnEnemy(x, 0, z, false);
+      if (ch === "^") placePad(x, 0, z, r <= 7);
+      if (ch === "1") {
+        const n = enemies.length;
+        spawnEnemy(x, 0, z, false);
+        if (r <= 7 && enemies.length > n) enemies[enemies.length - 1].opener = true;
+      }
       if (ch === "2") spawnEnemy(x, 0, z, true);
       if (ch === "B") spawnBarrel(x, z);
       if (ch === "G") makePickup(x, 0.6, z, "gold", mGold, "GOLD KEY");
@@ -2239,7 +2393,7 @@ function buildLevel() {
       if (ch === "Z") makePickup(x, 0.6, z, "bazooka", new THREE.MeshLambertMaterial({ color: 0x4a3a14, emissive: 0x221100, flatShading: true }), "BAZOOKA");
       if (ch === "R") makePickup(x, 0.6, z, "heat", new THREE.MeshLambertMaterial({ color: 0x8a2010, emissive: 0x401000, flatShading: true }), "HEAT SEEKER");
       if (ch === "U") makePickup(x, 0.6, z, "drunk", new THREE.MeshLambertMaterial({ color: 0x8a6a20, emissive: 0x332200, flatShading: true }), "DRUNK MISSILES");
-      if (ch === "H") makePickup(x, ch === "," ? -1.6 : 0.6, z, "health", new THREE.MeshLambertMaterial({ color: 0x22aa40, emissive: 0x113311, flatShading: true }), "MONK MEAL");
+      if (ch === "H") makeMonkMeal(x, 0.6, z, r <= 7);
       if (ch === "A") makePickup(x, 0.6, z, "ammo", new THREE.MeshLambertMaterial({ color: 0xc8a020, flatShading: true }), "AMMO");
       if (ch === "N") makePickup(x, -1.6, z, "drunk", new THREE.MeshLambertMaterial({ color: 0x8a6a20, emissive: 0x332200, flatShading: true }), "DRUNK MISSILES");
       if (ch === "D" || ch === "g" || ch === "l" || ch === "Q") {
@@ -2422,21 +2576,20 @@ function bind() {
       }
     }
     if (!started) startGame();
-    if (started && screen === "play" && !isLocked()) {
-      wantLock = false;
-      lockPointer();
-    } else if (!isLocked()) {
-      lockPointer();
-    }
+    if (started && screen === "play" && !isLocked()) lockPointer();
+    else if (!isLocked()) lockPointer();
   };
   window.addEventListener("pointerdown", onStartClick, true);
   const onLockChange = () => {
     pointerLocked = isLocked();
-    if (ignoreUnlock) {
-      if (!pointerLocked) ignoreUnlock = false;
+    if (optionsOpen || ignoreUnlock) {
+      if (!pointerLocked && ignoreUnlock) ignoreUnlock = false;
       return;
     }
-    if (started && screen === "play" && !optionsOpen && !pointerLocked) openOptions();
+    if (started && screen === "play" && !pointerLocked) {
+      wantLock = true;
+      showMsg("CLICK TO LOOK", 2400);
+    }
   };
   document.addEventListener("pointerlockchange", onLockChange);
   document.addEventListener("mozpointerlockchange", onLockChange);
@@ -2446,7 +2599,7 @@ function bind() {
       return;
     }
     if (!started || !player || optionsOpen) return;
-    if (!isLocked() && !pointerLocked) return;
+    if (!isLocked() && !pointerLocked && !mouseDown) return;
     player.yaw -= e.movementX * 0.00215 * lookSens;
     player.pitch -= e.movementY * 0.00215 * lookSens;
     player.pitch = Math.max(-1.2, Math.min(1.2, player.pitch));
@@ -2487,7 +2640,7 @@ function bind() {
       return;
     }
     if (!started) return;
-    if (codeIs("fire", e.code)) {
+    if (isFireEvent(e)) {
       e.preventDefault();
       fire();
     }
@@ -2506,13 +2659,16 @@ function bind() {
   }, true);
   window.addEventListener("mousedown", (e) => {
     if (!started || optionsOpen) return;
-    if (e.button !== 0) return;
-    if (!isLocked()) { wantLock = false; lockPointer(); }
+    if (e.button !== 0 && e.button !== 2) return;
+    if (!isLocked()) lockPointer();
     if (suppressShot) { suppressShot = 0; return; }
     mouseDown = true;
     fire();
   }, true);
   window.addEventListener("mouseup", () => { mouseDown = false; }, true);
+  window.addEventListener("contextmenu", (e) => {
+    if (started && !optionsOpen) e.preventDefault();
+  }, true);
   window.addEventListener("wheel", (e) => {
     if (!started || optionsOpen) return;
     const dir = e.deltaY > 0 ? 1 : -1;
@@ -2537,6 +2693,7 @@ function tick(dt) {
   if (invulnT > 0) invulnT -= dt;
   if (msgT > 0) msgT -= dt;
   if (dmgT > 0) dmgT -= dt;
+  if (hitCueT > 0) hitCueT -= dt;
   if (faceHurt > 0) faceHurt -= dt;
   if (landDip > 0) landDip -= dt * 4;
 
@@ -2588,8 +2745,8 @@ function tick(dt) {
   for (const p of pads) {
     p.cool = Math.max(0, p.cool - dt);
     p.flash = Math.max(0, p.flash - dt * 3);
-    p.nub.material.emissive.setHex(p.flash > 0 ? 0xaa6600 : 0x553300);
-    p.disk.position.y = 0.1 + Math.sin(titleT * 10 + p.x) * 0.02 + (p.flash > 0 ? 0.06 : 0);
+    p.nub.material.emissive.setHex(p.flash > 0 ? 0xcc7700 : (p.yard ? 0xaa5500 : 0x553300));
+    p.disk.position.y = (p.yard ? 0.14 : 0.1) + Math.sin(titleT * 10 + p.x) * (p.yard ? 0.05 : 0.02) + (p.flash > 0 ? 0.08 : 0);
     if (p.cool > 0) continue;
     if (Math.hypot(player.x - p.x, player.z - p.z) < 1.18 && player.y < p.y + 1.25 && player.y > p.y - 0.4) {
       player.vy = PAD_UP;
@@ -2651,7 +2808,7 @@ function tick(dt) {
     reloading -= dt;
     if (reloading <= 0) finishReload();
   }
-  if ((mouseDown || actionHeld("fire")) && currentWep().auto) fire();
+  if (fireHeld() && currentWep().auto) fire();
 
   for (const e of enemies) updateEnemy(e, dt);
   updateRockets(dt);

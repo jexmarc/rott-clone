@@ -19,13 +19,15 @@ Or open `index.html` directly. A local server is safer for the audio file.
 
 - Title has CLICK TO PLAY and CONTROLS. One click on play starts the game and pointer lock.
 - WASD and arrow keys both move. Always. Shift run, Space jump, mouse look. These work even if lock is refused.
-- Left click fire, Ctrl or Enter also fire, R reload, 1-5 weapons, E use / pushwall
+- Left click, right click, Ctrl, and Enter all fire. Fire works without pointer lock. The click that grabs lock also shoots.
+- If lock drops, the game stays live and shows CLICK TO LOOK. Esc opens Controls. BACK click grabs lock again. Esc-close does not eat the next lock click.
+- R reload, 1-5 weapons, E use / pushwall
 - M mutes the title track. There is no MUTE button. Music on/off is also on the Controls screen.
 - CONTROLS on the title, or ESC in-game, opens a VGA Controls screen: look slider, mute, key legend, click-to-rebind. ESC or BACK returns. Settings persist in localStorage. Closing does not leave a held key or steal focus.
 
 ## Level flow (shareware E1A1 shape)
 
-1. Spawn on courtyard dirt, looking east down the yard. No pad underfoot. Tree and a guard are ahead. Door is in the south wall.
+1. Spawn on courtyard dirt, looking east down the yard. No pad underfoot. A bronze bounce pad, a monk meal, and one visible guard sit in the opening yard. Door is in the south wall.
 2. Main door in the south wall into the hall, then the hub
 3. Bounce pads later, up to the east catwalk for the gold key
 4. Gold door north into the jagged / pillar wing
