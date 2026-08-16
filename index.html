@@ -194,7 +194,7 @@ let wantLock = false;
 let suppressShot = 0;
 let invulnT = 0;
 let lookSens = 1;
-let amb = { nodes: [], dripT: 0 };
+let amb = { nodes: [], dripT: 0, crackleT: 0.2, master: null };
 
 const MOVE_ARROW = { fwd: "ArrowUp", back: "ArrowDown", left: "ArrowLeft", right: "ArrowRight" };
 
@@ -686,14 +686,28 @@ const SFX = {
     playOsc(70, 0.12, "square", 0.12, 30);
   },
   jump() { playOsc(210, 0.06, "sine", 0.07, 130); },
-  step() {
-    thump(88 + Math.random() * 22, 0.09, 0.42);
-    playNoise(0.07, 0.22, 540, "lowpass");
-    playNoise(0.04, 0.1, 1600, "highpass");
+  step(kind, run) {
+    const vol = run ? 0.58 : 0.44;
+    if (kind === "metal") {
+      kick(150, 0.055, vol * 0.42);
+      blast(0.055, vol * 0.5, 2400, "bandpass", 1.5);
+      blast(0.08, vol * 0.32, 700, "lowpass");
+    } else if (kind === "dirt") {
+      kick(58, 0.11, vol * 0.72);
+      blast(0.1, vol * 0.48, 340, "lowpass");
+      blast(0.045, vol * 0.18, 1100, "highpass");
+    } else {
+      kick(76, 0.085, vol * 0.62);
+      blast(0.06, vol * 0.42, 980, "bandpass", 1.15);
+      blast(0.075, vol * 0.38, 400, "lowpass");
+    }
   },
   drip() {
-    playOsc(720 + Math.random() * 380, 0.045, "sine", 0.055, 280);
-    playNoise(0.025, 0.035, 2600, "highpass");
+    playOsc(640 + Math.random() * 420, 0.07, "sine", 0.11, 200);
+    playNoise(0.04, 0.07, 2400, "highpass");
+  },
+  crackle() {
+    blast(0.04, 0.07, 1800, "bandpass", 1.6);
   },
   enemyShot() {
     crack(0.28);
@@ -701,13 +715,15 @@ const SFX = {
   }
 };
 
-function loopNoiseBuf(dur) {
+function loopNoiseBuf(dur, mode) {
   const n = ac.createBuffer(1, Math.max(1, (ac.sampleRate * dur) | 0), ac.sampleRate);
   const d = n.getChannelData(0);
-  let last = 0;
+  let brown = 0, pink = 0;
   for (let i = 0; i < d.length; i++) {
-    last = last * 0.94 + (Math.random() * 2 - 1) * 0.06;
-    d[i] = last;
+    const white = Math.random() * 2 - 1;
+    brown = brown * 0.985 + white * 0.015;
+    pink = pink * 0.87 + white * 0.13;
+    d[i] = mode === "brown" ? brown * 3.4 : mode === "pink" ? pink * 1.55 : white * 0.65;
   }
   return n;
 }
@@ -718,38 +734,102 @@ function stopAmbience() {
     try { if (n.disconnect) n.disconnect(); } catch (err) {}
   }
   amb.nodes = [];
+  amb.master = amb.windG = amb.airG = amb.torchG = amb.clothG = amb.droneG = null;
 }
 
 function startAmbience() {
   stopAmbience();
   if (!ac) return;
   try {
-  const wind = ac.createBufferSource();
-  wind.buffer = loopNoiseBuf(2.8);
-  wind.loop = true;
-  const wf = env("lowpass", 260, 0.65);
-  const wg = ac.createGain();
-  wg.gain.value = 0.09;
-  wind.connect(wf); wf.connect(wg); wg.connect(ac.destination);
-  wind.start();
-  const torch = ac.createBufferSource();
-  torch.buffer = loopNoiseBuf(1.6);
-  torch.loop = true;
-  const tf = env("bandpass", 1500, 1.3);
-  const tg = ac.createGain();
-  tg.gain.value = 0.055;
-  torch.connect(tf); tf.connect(tg); tg.connect(ac.destination);
-  torch.start();
-  const hum = ac.createOscillator();
-  hum.type = "sine";
-  hum.frequency.value = 58;
-  const hg = ac.createGain();
-  hg.gain.value = 0.035;
-  hum.connect(hg); hg.connect(ac.destination);
-  hum.start();
-  amb.nodes.push(wind, wf, wg, torch, tf, tg, hum, hg);
-  amb.dripT = 0.8;
+    const master = ac.createGain();
+    master.gain.value = 0.58;
+    master.connect(ac.destination);
+    amb.master = master;
+
+    function layer(buf, type, freq, Q, gain) {
+      const src = ac.createBufferSource();
+      src.buffer = buf;
+      src.loop = true;
+      const f = env(type, freq, Q);
+      const g = ac.createGain();
+      g.gain.value = gain;
+      src.connect(f); f.connect(g); g.connect(master);
+      src.start();
+      amb.nodes.push(src, f, g);
+      return g;
+    }
+
+    const brown = loopNoiseBuf(5.2, "brown");
+    const pink = loopNoiseBuf(4.4, "pink");
+    amb.windG = layer(brown, "lowpass", 240, 0.7, 0.12);
+    amb.airG = layer(pink, "bandpass", 1100, 0.75, 0.06);
+    amb.torchG = layer(pink, "bandpass", 1700, 1.35, 0.045);
+    amb.clothG = layer(pink, "bandpass", 480, 0.9, 0.02);
+
+    const droneG = ac.createGain();
+    droneG.gain.value = 0.034;
+    droneG.connect(master);
+    amb.droneG = droneG;
+    const d1 = ac.createOscillator();
+    d1.type = "sine";
+    d1.frequency.value = 43;
+    const d2 = ac.createOscillator();
+    d2.type = "sine";
+    d2.frequency.value = 64.4;
+    const d3 = ac.createOscillator();
+    d3.type = "triangle";
+    d3.frequency.value = 86;
+    const d3g = ac.createGain();
+    d3g.gain.value = 0.35;
+    d1.connect(droneG);
+    d2.connect(droneG);
+    d3.connect(d3g); d3g.connect(droneG);
+    d1.start(); d2.start(); d3.start();
+    amb.nodes.push(d1, d2, d3, d3g, droneG, master);
+
+    amb.dripT = 0.6;
+    amb.crackleT = 0.25;
   } catch (err) {}
+}
+
+function playerCell() {
+  return {
+    c: Math.round(player.x / TILE + W / 2),
+    r: Math.round(player.z / TILE + 2)
+  };
+}
+
+function floorKind() {
+  if (!player) return "stone";
+  const pos = playerCell();
+  const ch = cell(pos.c, pos.r);
+  if (ch === "c") return "metal";
+  if (pos.r <= 7 && ch !== ".") return "dirt";
+  return "stone";
+}
+
+function updateAmbience(dt, moving, running) {
+  if (!started) return;
+  if (!ac) return;
+  if (!amb.master) startAmbience();
+  if (!amb.master) return;
+  const t = ac.currentTime;
+  const yard = playerCell().r <= 7;
+  if (amb.windG) amb.windG.gain.setTargetAtTime(yard ? 0.14 : 0.032, t, 0.35);
+  if (amb.airG) amb.airG.gain.setTargetAtTime(yard ? 0.075 : 0.018, t, 0.35);
+  if (amb.torchG) amb.torchG.gain.setTargetAtTime((yard ? 0.028 : 0.07) * (0.65 + Math.random() * 0.55), t, 0.07);
+  if (amb.clothG) amb.clothG.gain.setTargetAtTime(moving ? (running ? 0.095 : 0.062) : 0.02, t, 0.12);
+  if (amb.droneG) amb.droneG.gain.setTargetAtTime(yard ? 0.026 : 0.042, t, 0.45);
+  amb.dripT -= dt;
+  if (amb.dripT <= 0) {
+    amb.dripT = yard ? 2.2 + Math.random() * 2.6 : 0.85 + Math.random() * 1.5;
+    SFX.drip();
+  }
+  amb.crackleT -= dt;
+  if (amb.crackleT <= 0) {
+    amb.crackleT = 0.18 + Math.random() * 0.45;
+    if (!yard || Math.random() < 0.3) SFX.crackle();
+  }
 }
 
 const TAUNTS = [
@@ -2372,16 +2452,12 @@ function tick(dt) {
   if (lightning > 0) lightning -= dt * 3;
   else if (Math.random() < dt * 0.15) lightning = 1;
   if (!started || !player) return;
-  if (optionsOpen) return;
+  if (optionsOpen) {
+    updateAmbience(dt, false, false);
+    return;
+  }
   timeAlive += dt;
   if (invulnT > 0) invulnT -= dt;
-  if (ac && started) {
-    amb.dripT -= dt;
-    if (amb.dripT <= 0) {
-      amb.dripT = 1.2 + Math.random() * 2.4;
-      SFX.drip();
-    }
-  }
   if (msgT > 0) msgT -= dt;
   if (dmgT > 0) dmgT -= dt;
   if (faceHurt > 0) faceHurt -= dt;
@@ -2399,10 +2475,17 @@ function tick(dt) {
   const wishX = (ix / len) * cy + (iz / len) * sy;
   const wishZ = (iz / len) * cy - (ix / len) * sy;
   const moving = ix || iz;
+  updateAmbience(dt, !!moving, running);
   if (moving) {
     bob += dt * (running ? 26 : 17);
-    stepT += dt * (running ? 5.2 : 3.4);
-    if (player.onGround && stepT > 0.72) { stepT = 0; SFX.step(); }
+    const period = running ? 0.27 : 0.41;
+    stepT += dt;
+    if (player.onGround && stepT >= period) {
+      stepT -= period;
+      SFX.step(floorKind(), running);
+    }
+  } else {
+    stepT = 0.3;
   }
 
   if (actionHeld("jump") && player.onGround) { player.vy = JUMP; player.onGround = false; SFX.jump(); }
@@ -2410,7 +2493,10 @@ function tick(dt) {
   wasOnGround = player.onGround;
   player.onGround = false;
   tryMove(wishX * sp * dt, player.vy * dt, wishZ * sp * dt);
-  if (player.onGround && !wasOnGround && player.vy < -6) landDip = 0.18;
+  if (player.onGround && !wasOnGround && player.vy < -6) {
+    landDip = 0.18;
+    SFX.step(floorKind(), true);
+  }
 
   for (const p of pads) {
     p.cool = Math.max(0, p.cool - dt);
