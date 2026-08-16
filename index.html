@@ -54,11 +54,11 @@ const MAP = [
   "#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~##",
   "#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~##",
   "#~~~~~~~S~~~~~~~~~~~~~~~~~~~~~~~~~##",
-  "#~~~~~~~~~~~~~~~1~~~~~~~t~~R~~M~~~##",
+  "#~~~~~~~~~~~~~~~~~~~~~1~t~~R~~M~~~##",
   "#~~~~~~~~~Z~~~~~~~~~~U~~~~~~~B~~~~##",
   "#~~~~~~~~~~~~~~~~~~~~~T~~~~~~PQY.*##",
   "###########D########################",
-  "#....1..R.U.^.....................##",
+  "#...........R.U.^..1..............##",
   "#.........^^.........1............##",
   "#....A............................##",
   "##########D#########################",
@@ -268,11 +268,12 @@ const weps = [
   { id: "drunk", name: "DRUNK", dmg: 42, rpm: 42, mag: 4, reserve: 0, spread: 0, auto: false, kick: 0.34, rocket: "drunk" }
 ];
 let wepI = 0;
-let mag = [24, 0, 0, 0, 0];
-let reserve = [96, 0, 0, 0, 0];
+let mag = [24, 32, 6, 5, 4];
+let reserve = [96, 64, 8, 6, 5];
 let pistolHand = 0;
 let viewPunch = 0;
-let have = [true, false, false, false, false];
+let have = [true, true, true, true, true];
+let ignoreUnlock = false;
 let lastShot = 0;
 let reloading = 0;
 let mouseDown = false;
@@ -766,6 +767,7 @@ function startAmbience() {
   stopAmbience();
   initAudio();
   if (!ac) return;
+  try { if (ac.state === "suspended") ac.resume(); } catch (err) {}
   try {
     const master = ac.createGain();
     master.gain.value = 0.92;
@@ -1300,6 +1302,7 @@ function openOptions() {
   mouseDown = false;
   wantLock = false;
   suppressShot = 0;
+  ignoreUnlock = true;
   clearKeys();
   ui.style.pointerEvents = "auto";
   try { document.exitPointerLock(); } catch (err) {}
@@ -1393,7 +1396,13 @@ function placePad(x, y, z) {
   pads.push({ x, z, y, group, disk, nub, cool: 0, flash: 0 });
 }
 
+function nearSpawn(x, z) {
+  const s = findCell("S");
+  return Math.hypot(x - worldX(s.c), z - worldZ(s.r)) < TILE * 8;
+}
+
 function spawnEnemy(x, y, z, tough) {
+  if (nearSpawn(x, z)) return;
   const g = new THREE.Group();
   const cloth = tough ? 0x2a2a28 : 0xb88850;
   const pants = tough ? 0x1a1a18 : 0x6a4a28;
@@ -1911,7 +1920,7 @@ function killEnemy(e, gibby) {
 }
 
 function hurtPlayer(n) {
-  if (!player || optionsOpen || invulnT > 0 || timeAlive < 2.6) return;
+  if (!player || optionsOpen || invulnT > 0 || timeAlive < 3.2) return;
   const soak = Math.min(player.armor, n * 0.6);
   player.armor -= soak;
   player.hp -= (n - soak);
@@ -2028,15 +2037,15 @@ function resetPlayer() {
   };
   keys.gold = keys.silver = false;
   wepI = 0;
-  mag = [24, 0, 0, 0, 0];
-  reserve = [96, 0, 0, 0, 0];
-  have = [true, false, false, false, false];
+  mag = [24, 32, 6, 5, 4];
+  reserve = [96, 64, 8, 6, 5];
+  have = [true, true, true, true, true];
   pistolHand = 0;
   viewPunch = 0;
   gunKick = 0;
   gunRecoil = 0;
   timeAlive = 0;
-  invulnT = 2.6;
+  invulnT = 3.2;
   if (gunRoot) swapGun();
 }
 
@@ -2077,10 +2086,12 @@ function updateEnemy(e, dt) {
   }
   const dx = player.x - e.x, dz = player.z - e.z;
   const dist = Math.hypot(dx, dz) || 0.001;
-  if (invulnT > 0 || timeAlive < 2.6) return;
-  const los = dist < 22 && hasLOS(e);
-  if (los) e.state = dist < 8 ? "shoot" : "chase";
-  else if (e.state !== "idle") e.state = "chase";
+  if (invulnT > 0 || timeAlive < 3.2) return;
+  if (nearSpawn(e.x, e.z) || nearSpawn(player.x, player.z)) return;
+  const los = dist < 20 && hasLOS(e);
+  if (los) e.state = dist < 9 ? "shoot" : "chase";
+  else if (e.state === "shoot") e.state = "chase";
+  else if (e.state === "chase" && dist > 28) e.state = "idle";
   const sp = (e.tough ? 4.4 : 3.6) * dt;
   function walk(wx, wz) {
     const nx = e.x + wx, nz = e.z + wz;
@@ -2092,7 +2103,7 @@ function updateEnemy(e, dt) {
     walk(-dz / dist * dt * 1.8, dx / dist * dt * 1.8);
     if (dist < 4.2) walk(-(dx / dist) * sp, -(dz / dist) * sp);
     e.nextShot -= dt;
-    if (e.nextShot <= 0 && los && dist < 18) {
+    if (e.nextShot <= 0 && los && dist < 16) {
       e.nextShot = e.tough ? 0.42 : 0.7;
       SFX.enemyShot();
       const origin = new THREE.Vector3(e.x, 1.3, e.z);
@@ -2111,7 +2122,7 @@ function buildLevel() {
   const mBlock = mat(blockTex, 0xffe0b0, 0x4a2810);
   const mDark = mat(darkTex, 0xa88868);
   const mFloor = mat(floorTex, 0xf0d0a0, 0x4a3018);
-  const mDirt = new THREE.MeshLambertMaterial({ map: dirtTex, color: 0xfff6d0, emissive: 0xd09038, flatShading: true });
+  const mDirt = new THREE.MeshLambertMaterial({ map: dirtTex, color: 0xfff8d8, emissive: 0xe0a040, flatShading: true });
   const mMetal = mat(metalTex, 0x889090);
   const mBanner = mat(bannerTex);
   const mCeil = new THREE.MeshLambertMaterial({ color: 0x1a120c, flatShading: true });
@@ -2123,9 +2134,9 @@ function buildLevel() {
 
   scene.background = new THREE.Color(0xf2a24a);
   scene.fog = new THREE.Fog(0xf2a24a, 170, 320);
-  scene.add(new THREE.AmbientLight(0xffe8b8, 2.25));
-  scene.add(new THREE.HemisphereLight(0xfff4d0, 0xc86828, 1.65));
-  const sun = new THREE.DirectionalLight(0xfff0d0, 2.7);
+  scene.add(new THREE.AmbientLight(0xfff0c8, 2.7));
+  scene.add(new THREE.HemisphereLight(0xfff8dc, 0xd07830, 1.9));
+  const sun = new THREE.DirectionalLight(0xfff4dc, 3.1);
   sun.position.set(48, 72, 12);
   scene.add(sun);
   const fill = new THREE.DirectionalLight(0xffe0b0, 1.15);
@@ -2321,8 +2332,13 @@ function lockPointer() {
 }
 
 function setKey(e, down) {
-  if (!e || !e.code) return;
-  keysDown[e.code] = down;
+  if (!e) return;
+  if (e.code) keysDown[e.code] = down;
+  const key = e.key || "";
+  if (key === "ArrowUp" || e.code === "ArrowUp") keysDown.ArrowUp = down;
+  if (key === "ArrowDown" || e.code === "ArrowDown") keysDown.ArrowDown = down;
+  if (key === "ArrowLeft" || e.code === "ArrowLeft") keysDown.ArrowLeft = down;
+  if (key === "ArrowRight" || e.code === "ArrowRight") keysDown.ArrowRight = down;
 }
 
 function startGame() {
@@ -2367,6 +2383,7 @@ function startGame() {
     renderer.domElement.focus();
   }
   startAmbience();
+  SFX.step("dirt", false);
   lockPointer();
   showMsg("THE HUNT BEGINS", 1500);
 }
@@ -2413,8 +2430,16 @@ function bind() {
     }
   };
   window.addEventListener("pointerdown", onStartClick, true);
-  document.addEventListener("pointerlockchange", () => { pointerLocked = isLocked(); });
-  document.addEventListener("mozpointerlockchange", () => { pointerLocked = isLocked(); });
+  const onLockChange = () => {
+    pointerLocked = isLocked();
+    if (ignoreUnlock) {
+      if (!pointerLocked) ignoreUnlock = false;
+      return;
+    }
+    if (started && screen === "play" && !optionsOpen && !pointerLocked) openOptions();
+  };
+  document.addEventListener("pointerlockchange", onLockChange);
+  document.addEventListener("mozpointerlockchange", onLockChange);
   window.addEventListener("mousemove", (e) => {
     if (optionsOpen && slideDrag) {
       sensFromUiX(uiPos(e).x);
@@ -2450,6 +2475,9 @@ function bind() {
       if (e.code === "ArrowRight") setSens(lookSens + 0.1);
       if (e.code === "KeyM") toggleMute();
       return;
+    }
+    if (started && (/^(Arrow|Space|KeyW|KeyA|KeyS|KeyD|Shift|Control|Enter)/.test(e.code || "") || e.key === " ")) {
+      e.preventDefault();
     }
     setKey(e, true);
     if (e.code === "KeyM" && !started) toggleMute();
@@ -2745,7 +2773,7 @@ function main() {
       "void main(){",
       "  vec4 c = texture2D(tDiffuse, vUv);",
       "  float bayer = fract(sin(dot(gl_FragCoord.xy, vec2(12.9898,78.233))) * 43758.5453);",
-      "  c.rgb = c.rgb * 1.85 + vec3(0.12, 0.06, 0.02);",
+      "  c.rgb = c.rgb * 2.05 + vec3(0.16, 0.08, 0.03);",
       "  c.rgb = floor(c.rgb * 28.0 + bayer * 0.25) / 28.0;",
       "  float scan = 0.97 + 0.03 * step(0.5, fract(gl_FragCoord.y * 0.5));",
       "  c.rgb *= scan;",
