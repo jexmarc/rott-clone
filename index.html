@@ -175,6 +175,7 @@ let msgT = 0;
 let dmgT = 0;
 let hitCueT = 0;
 let hitCueAng = 0;
+let hitMarkT = 0;
 let bob = 0;
 let timeAlive = 0;
 let timedDoor = null;
@@ -1148,6 +1149,18 @@ function paintHUD(g) {
   g.fillStyle = "#201008";
   g.fillRect(159, 85, 2, 6);
   g.fillRect(156, 87, 8, 1);
+  if (hitMarkT > 0) {
+    const a = Math.min(1, hitMarkT * 5);
+    g.fillStyle = "rgba(255,220,40," + a + ")";
+    g.fillRect(148, 80, 6, 2);
+    g.fillRect(166, 80, 6, 2);
+    g.fillRect(148, 94, 6, 2);
+    g.fillRect(166, 94, 6, 2);
+    g.fillRect(148, 80, 2, 6);
+    g.fillRect(170, 80, 2, 6);
+    g.fillRect(148, 90, 2, 6);
+    g.fillRect(170, 90, 2, 6);
+  }
 
   const mx = 252, my = 8, mw = 64, mh = 52;
   g.fillStyle = "rgba(8,4,4,0.7)";
@@ -1496,27 +1509,42 @@ function placePad(x, y, z, yard, force) {
   );
   nub.position.y = yard ? 0.26 : 0.16;
   group.add(base, disk, nub);
+  let column = null;
   if (yard) {
     const ring = new THREE.Mesh(
-      new THREE.TorusGeometry(1.22, 0.07, 6, 16),
-      new THREE.MeshLambertMaterial({ color: 0xffc040, emissive: 0x884400, flatShading: true })
+      new THREE.TorusGeometry(1.28, 0.09, 6, 16),
+      new THREE.MeshLambertMaterial({ color: 0xffd060, emissive: 0xcc6600, flatShading: true })
     );
     ring.rotation.x = Math.PI / 2;
-    ring.position.y = 0.28;
+    ring.position.y = 0.3;
     group.add(ring);
-    const column = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.12, 0.22, 2.4, 6),
-      new THREE.MeshBasicMaterial({ color: 0xffb040, transparent: true, opacity: 0.35 })
+    column = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.16, 0.3, 3.4, 6),
+      new THREE.MeshBasicMaterial({ color: 0xffc050, transparent: true, opacity: 0.55 })
     );
-    column.position.y = 1.4;
+    column.position.y = 1.9;
     group.add(column);
-    const light = new THREE.PointLight(0xffaa33, 3.4, 22, 1.05);
-    light.position.y = 1.6;
+    const light = new THREE.PointLight(0xffb040, 6.2, 28, 1);
+    light.position.y = 2.1;
     group.add(light);
+    for (const side of [-1.7, 1.7]) {
+      const torch = new THREE.PointLight(0xff8020, 2.8, 14, 1.1);
+      torch.position.set(side, 1.4, 0);
+      group.add(torch);
+      const bowl = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.12, 0.18, 1.1, 6),
+        new THREE.MeshLambertMaterial({ color: 0x6a3a18, emissive: 0x552208, flatShading: true })
+      );
+      bowl.position.set(side, 0.55, 0);
+      group.add(bowl);
+      const flame = new THREE.Mesh(new THREE.SphereGeometry(0.16, 6, 6), new THREE.MeshBasicMaterial({ color: 0xff8844 }));
+      flame.position.set(side, 1.2, 0);
+      group.add(flame);
+    }
   }
   group.position.set(x, y, z);
   scene.add(group);
-  pads.push({ x, z, y, group, disk, nub, cool: 0, flash: 0, yard: !!yard });
+  pads.push({ x, z, y, group, disk, nub, column, cool: 0, flash: 0, yard: !!yard });
 }
 
 function nearSpawn(x, z) {
@@ -1566,7 +1594,7 @@ function spawnEnemy(x, y, z, tough) {
     group: g, body, head, x, y, z, vx: 0, vz: 0,
     hp: tough ? 150 : 42, max: tough ? 150 : 42, tough,
     opener: false,
-    state: "idle", nextShot: 1.35 + Math.random(), dead: false, hurt: 0
+    state: "idle", nextShot: 1.35 + Math.random(), dead: false, hurt: 0, flinch: 0
   });
 }
 
@@ -1712,8 +1740,8 @@ function buildPistol(name, x, y, z, yaw) {
 function buildGun(id) {
   const g = new THREE.Group();
   if (id === "pistol") {
-    g.add(buildPistol("rightPistol", 0.15, -0.2, -0.5, 0));
-    g.add(buildPistol("leftPistol", -0.13, -0.19, -0.48, 0.08));
+    g.add(buildPistol("rightPistol", 0.14, -0.28, -0.42, 0));
+    g.add(buildPistol("leftPistol", -0.12, -0.27, -0.4, 0.08));
   } else if (id === "mp40") {
     addPart(g, new THREE.BoxGeometry(0.11, 0.12, 0.46), metalMat(0xb8b898), 0.28, -0.18, -0.58);
     addPart(g, new THREE.BoxGeometry(0.1, 0.09, 0.22), metalMat(0x8a4a18), 0.28, -0.26, -0.36);
@@ -1749,7 +1777,7 @@ function buildGun(id) {
 
 function setupGun() {
   gunRoot = new THREE.Group();
-  gunRoot.scale.set(0.52, 0.52, 0.52);
+  gunRoot.scale.set(0.26, 0.26, 0.26);
   camera.add(gunRoot);
   muzzle = new THREE.PointLight(0xffaa55, 0, 7);
   muzzle.position.set(0.24, -0.16, -0.92);
@@ -1810,6 +1838,7 @@ function fire() {
     if (w.id === "mp40") SFX.mp40(); else SFX.shoot();
     hitscan(w);
   }
+  if (mag[wepI] <= 0) startReload();
 }
 
 function hitscan(w) {
@@ -2026,9 +2055,12 @@ function boomBarrel(b) {
 
 function hurtEnemy(e, dmg, part, hit) {
   e.hp -= dmg;
-  e.hurt = 0.14;
-  e.head.material.emissive = new THREE.Color(part === "head" ? 0x880000 : 0x330000);
+  e.hurt = 0.28;
+  e.flinch = 0.22;
+  hitMarkT = 0.22;
+  e.head.material.emissive = new THREE.Color(part === "head" ? 0xcc2000 : 0x881000);
   spawnGibs(e.x, 1.1, e.z, part === "head" ? 16 : 8);
+  playOsc(880, 0.04, "square", 0.1);
   addDecal(e.x, e.y + 0.02, e.z);
   const wall = nearestWallHit(e.x, 1.2, e.z);
   if (wall) addDecal(e.x, 1.2, e.z, wall);
@@ -2192,6 +2224,7 @@ function resetPlayer() {
   timeAlive = 0;
   invulnT = 3.2;
   hitCueT = 0;
+  hitMarkT = 0;
   if (gunRoot) swapGun();
 }
 
@@ -2251,6 +2284,7 @@ function updateEnemy(e, dt) {
     e.hurt -= dt;
     if (e.hurt <= 0) e.head.material.emissive.setHex(0x000000);
   }
+  if (e.flinch > 0) e.flinch -= dt;
   const dx = player.x - e.x, dz = player.z - e.z;
   const dist = Math.hypot(dx, dz) || 0.001;
   if (invulnT > 0 || timeAlive < 3.2) return;
@@ -2270,19 +2304,20 @@ function updateEnemy(e, dt) {
     walk(-dz / dist * dt * 1.8, dx / dist * dt * 1.8);
     if (dist < 4.2) walk(-(dx / dist) * sp, -(dz / dist) * sp);
     e.nextShot -= dt;
-    if (e.nextShot <= 0 && los && dist < 16) {
+    if (e.nextShot <= 0 && los && dist < 14) {
       const chip = e.opener || timeAlive < 24;
-      e.nextShot = e.tough ? 0.55 : (chip ? 1.2 : 0.9);
+      e.nextShot = e.tough ? 0.55 : (chip ? 1.7 : 0.95);
       SFX.enemyShot();
       const origin = new THREE.Vector3(e.x, 1.3, e.z);
       const dest = new THREE.Vector3(player.x, player.y + 1.3, player.z);
       addTracer(origin, dest);
-      const acc = e.tough ? 0.7 : (chip ? 0.42 : 0.55);
-      const dmg = e.tough ? 11 : (chip ? 5 : 7);
+      const acc = e.tough ? 0.7 : (chip ? 0.22 : 0.5);
+      const dmg = e.tough ? 11 : (chip ? 3 : 6);
       if (Math.random() < acc) hurtPlayer(dmg, e.x, e.z);
     }
   }
-  e.group.position.set(e.x, e.y, e.z);
+  const kick = e.flinch > 0 ? 0.18 : 0;
+  e.group.position.set(e.x + (Math.random() - 0.5) * kick, e.y, e.z + (Math.random() - 0.5) * kick);
   e.group.lookAt(player.x, e.y, player.z);
 }
 
@@ -2402,7 +2437,9 @@ function buildLevel() {
       if (ch === "1") {
         const n = enemies.length;
         spawnEnemy(x, 0, z, false);
-        if (r <= 7 && enemies.length > n) enemies[enemies.length - 1].opener = true;
+        if (r <= 7 && enemies.length > n && !enemies.some((en) => en.opener)) {
+          enemies[enemies.length - 1].opener = true;
+        }
       }
       if (ch === "2") spawnEnemy(x, 0, z, true);
       if (ch === "B") spawnBarrel(x, z);
@@ -2737,6 +2774,7 @@ function tick(dt) {
   if (msgT > 0) msgT -= dt;
   if (dmgT > 0) dmgT -= dt;
   if (hitCueT > 0) hitCueT -= dt;
+  if (hitMarkT > 0) hitMarkT -= dt;
   if (faceHurt > 0) faceHurt -= dt;
   if (landDip > 0) landDip -= dt * 4;
 
@@ -2788,8 +2826,12 @@ function tick(dt) {
   for (const p of pads) {
     p.cool = Math.max(0, p.cool - dt);
     p.flash = Math.max(0, p.flash - dt * 3);
-    p.nub.material.emissive.setHex(p.flash > 0 ? 0xcc7700 : (p.yard ? 0xaa5500 : 0x553300));
+    p.nub.material.emissive.setHex(p.flash > 0 ? 0xee8800 : (p.yard ? 0xcc6600 : 0x553300));
     p.disk.position.y = (p.yard ? 0.14 : 0.1) + Math.sin(titleT * 10 + p.x) * (p.yard ? 0.05 : 0.02) + (p.flash > 0 ? 0.08 : 0);
+    if (p.column && p.column.material) {
+      p.column.material.opacity = 0.38 + Math.sin(titleT * 6 + p.x) * 0.22;
+      p.column.scale.y = 1 + Math.sin(titleT * 5 + p.z) * 0.08;
+    }
     if (p.cool > 0) continue;
     if (Math.hypot(player.x - p.x, player.z - p.z) < (p.yard ? 1.62 : 1.18) && player.y < p.y + 1.25 && player.y > p.y - 0.4) {
       player.vy = PAD_UP;
@@ -2899,7 +2941,7 @@ function tick(dt) {
   camera.rotation.x = player.pitch + gunKick + viewPunch * 0.35 + Math.sin(bob * 2) * (moving ? 0.035 : 0);
   camera.rotation.z = (moving ? -ix * 0.07 : camera.rotation.z * 0.8) + viewPunch * 0.14;
   if (gunRoot) {
-    gunRoot.position.y = Math.sin(bob) * 0.045 - gunRecoil * 0.08;
+    gunRoot.position.y = -0.34 + Math.sin(bob) * 0.03 - gunRecoil * 0.06;
     gunRoot.position.x = Math.cos(bob) * 0.02;
     gunRoot.position.z = gunRecoil * 0.16;
     gunRoot.rotation.x = gunRecoil * 0.32;
