@@ -54,8 +54,8 @@ const MAP = [
   "#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~##",
   "#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~##",
   "#~~~~~~~S~~~~~~1~~~~~~~~~~~~~~~~~~##",
-  "#~~~~~~~~~~~~~1~H~~~~~~~t~~R~~M~~~##",
-  "#~~~~~~~~~Z~~~^~~~~~~U~~~~~~~B~~~~##",
+  "#~~~~~~~~~~~^~H~~~~~~~~~t~~R~~M~~~##",
+  "#~~~~~~~~~Z~~~~~~~~~~U~~~~~~~B~~~~##",
   "#~~~~~~~~~~~~~~~~~~~~~T~~~~~~PQY.*##",
   "###########D########################",
   "#...........R.U.^..1..............##",
@@ -1073,40 +1073,46 @@ function paintFace(g, x, y, hurt) {
 
 function paintHitCue(g) {
   if (hitCueT <= 0) return;
-  const a = Math.min(1, hitCueT * 2.2);
+  const a = Math.min(1, hitCueT * 1.4);
   const cx = 160, cy = 84;
-  const ox = Math.sin(hitCueAng) * 38;
-  const oy = -Math.cos(hitCueAng) * 32;
+  const ox = Math.sin(hitCueAng) * 52;
+  const oy = -Math.cos(hitCueAng) * 44;
   g.save();
   g.translate(cx + ox, cy + oy);
   g.rotate(hitCueAng);
-  g.fillStyle = "rgba(210,16,16," + (0.3 + a * 0.6) + ")";
+  g.fillStyle = "rgba(255,30,20," + (0.45 + a * 0.55) + ")";
   g.beginPath();
-  g.moveTo(0, -13);
-  g.lineTo(11, 9);
-  g.lineTo(0, 3);
-  g.lineTo(-11, 9);
+  g.moveTo(0, -22);
+  g.lineTo(16, 14);
+  g.lineTo(0, 5);
+  g.lineTo(-16, 14);
   g.closePath();
   g.fill();
   g.restore();
   const side = Math.sin(hitCueAng);
-  if (side > 0.2) {
-    g.fillStyle = "rgba(170,0,0," + (a * 0.32 * side) + ")";
-    g.fillRect(276, 0, 44, 168);
-  } else if (side < -0.2) {
-    g.fillStyle = "rgba(170,0,0," + (a * 0.32 * -side) + ")";
-    g.fillRect(0, 0, 44, 168);
+  const fwd = Math.cos(hitCueAng);
+  if (side > 0.15) {
+    g.fillStyle = "rgba(200,0,0," + (a * 0.55 * side) + ")";
+    g.fillRect(250, 0, 70, 168);
   }
-  if (Math.cos(hitCueAng) < -0.35) {
-    g.fillStyle = "rgba(170,0,0," + (a * 0.28) + ")";
-    g.fillRect(0, 148, 320, 20);
+  if (side < -0.15) {
+    g.fillStyle = "rgba(200,0,0," + (a * 0.55 * -side) + ")";
+    g.fillRect(0, 0, 70, 168);
+  }
+  if (fwd < -0.2) {
+    g.fillStyle = "rgba(200,0,0," + (a * 0.45) + ")";
+    g.fillRect(0, 140, 320, 28);
+  }
+  if (fwd > 0.35) {
+    g.fillStyle = "rgba(200,0,0," + (a * 0.4) + ")";
+    g.fillRect(0, 0, 320, 22);
   }
 }
 
 function paintHUD(g) {
   g.clearRect(0, 0, UW, UH);
   if (dmgT > 0) {
-    g.fillStyle = "rgba(140,0,0," + Math.min(0.55, dmgT * 1.4) + ")";
+    g.fillStyle = "rgba(140,0,0," + Math.min(0.22, dmgT * 0.55) + ")";
     g.fillRect(0, 0, UW, UH);
   }
   if (msgT > 0 && msg) {
@@ -1417,7 +1423,7 @@ function closeOptions(viaClick) {
     if (viaClick) {
       lockPointer();
     } else {
-      showMsg("CLICK TO LOOK", 2400);
+      showMsg("LOOK FREE  CLICK TO LOCK", 2000);
     }
   }
 }
@@ -2121,7 +2127,7 @@ function markHitDir(fromX, fromZ) {
   const fwd = hx * lookX + hz * lookZ;
   const right = hx * lookZ - hz * lookX;
   hitCueAng = Math.atan2(right, fwd);
-  hitCueT = 0.58;
+  hitCueT = 0.95;
 }
 
 function hurtPlayer(n, fromX, fromZ) {
@@ -2216,7 +2222,7 @@ function takePickup(p) {
   if (p.kind === "bazooka") { have[2] = true; reserve[2] += 8; if (mag[2] === 0) mag[2] = 6; wepI = 2; swapGun(); }
   if (p.kind === "heat") { have[3] = true; reserve[3] += 6; if (mag[3] === 0) mag[3] = 5; wepI = 3; swapGun(); }
   if (p.kind === "drunk") { have[4] = true; reserve[4] += 5; if (mag[4] === 0) mag[4] = 4; wepI = 4; swapGun(); }
-  if (p.kind === "health") player.hp = Math.min(100, player.hp + 25);
+  if (p.kind === "health") player.hp = Math.min(100, player.hp + 40);
   if (p.kind === "ammo") reserve[wepI] += weps[wepI].rocket ? 3 : 24;
   if (p.kind === "secret") win(true);
 }
@@ -2299,12 +2305,30 @@ function hasLOS(e) {
   const dx = player.x - e.x, dz = player.z - e.z;
   const dist = Math.hypot(dx, dz);
   if (dist < 0.5) return true;
-  const steps = Math.max(6, Math.ceil(dist / 0.4));
+  const steps = Math.max(10, Math.ceil(dist / 0.22));
   for (let i = 1; i < steps; i++) {
     const t = i / steps;
-    if (blocksSight(e.x + dx * t, e.z + dz * t)) return false;
+    const x = e.x + dx * t, z = e.z + dz * t;
+    if (blocksSight(x, z)) return false;
+    if (blocksSight(x + 0.28, z) || blocksSight(x - 0.28, z) || blocksSight(x, z + 0.28) || blocksSight(x, z - 0.28)) {
+      const c = Math.round(x / TILE + W / 2);
+      const r = Math.round(z / TILE + 2);
+      if (losBlock(cell(c, r))) return false;
+    }
   }
   return true;
+}
+
+function inCourtyard(x, z) {
+  return Math.round(z / TILE + 2) <= 7;
+}
+
+function playerCanSee(e) {
+  const lookX = -Math.sin(player.yaw);
+  const lookZ = -Math.cos(player.yaw);
+  const hx = e.x - player.x, hz = e.z - player.z;
+  const d = Math.hypot(hx, hz) || 1;
+  return (hx * lookX + hz * lookZ) / d > 0.2;
 }
 
 function updateEnemy(e, dt) {
@@ -2318,10 +2342,11 @@ function updateEnemy(e, dt) {
   const dist = Math.hypot(dx, dz) || 0.001;
   if (invulnT > 0 || timeAlive < 3.2) return;
   if (nearSpawn(player.x, player.z)) return;
-  if (timeAlive < 28 && !e.opener) return;
-  const los = dist < 36 && hasLOS(e);
+  if (inCourtyard(player.x, player.z) && !e.opener) return;
+  if (timeAlive < 40 && !e.opener) return;
+  const los = dist < 28 && hasLOS(e);
   if (los) e.state = dist < 11 ? "shoot" : "chase";
-  else if (e.state === "shoot" || e.state === "chase") e.state = "idle";
+  else e.state = "idle";
   const sp = (e.tough ? 4.4 : 3.6) * dt;
   function walk(wx, wz) {
     const nx = e.x + wx, nz = e.z + wz;
@@ -2334,15 +2359,19 @@ function updateEnemy(e, dt) {
     if (dist < 4.2) walk(-(dx / dist) * sp, -(dz / dist) * sp);
     e.nextShot -= dt;
     if (e.nextShot <= 0 && los && dist < 14) {
-      const chip = e.opener || timeAlive < 28;
-      e.nextShot = e.tough ? 0.55 : (chip ? 2.1 : 1.0);
-      SFX.enemyShot();
-      const origin = new THREE.Vector3(e.x, 1.3, e.z);
-      const dest = new THREE.Vector3(player.x, player.y + 1.3, player.z);
-      addTracer(origin, dest);
-      const acc = e.tough ? 0.7 : (chip ? 0.16 : 0.48);
-      const dmg = e.tough ? 11 : (chip ? 2 : 6);
-      if (Math.random() < acc) hurtPlayer(dmg, e.x, e.z);
+      if (e.opener && !playerCanSee(e)) {
+        e.nextShot = 0.35;
+      } else {
+        const chip = e.opener || timeAlive < 40;
+        e.nextShot = e.tough ? 0.55 : (chip ? 2.1 : 1.0);
+        SFX.enemyShot();
+        const origin = new THREE.Vector3(e.x, 1.3, e.z);
+        const dest = new THREE.Vector3(player.x, player.y + 1.3, player.z);
+        addTracer(origin, dest);
+        const acc = e.tough ? 0.7 : (chip ? 0.16 : 0.48);
+        const dmg = e.tough ? 11 : (chip ? 2 : 6);
+        if (Math.random() < acc) hurtPlayer(dmg, e.x, e.z);
+      }
     }
   }
   const kick = e.flinch > 0 ? 0.18 : 0;
@@ -2707,7 +2736,6 @@ function bind() {
       return;
     }
     if (!started || !player || optionsOpen) return;
-    if (!isLocked() && !pointerLocked && !mouseDown) return;
     player.yaw -= e.movementX * 0.00215 * lookSens;
     player.pitch -= e.movementY * 0.00215 * lookSens;
     player.pitch = Math.max(-1.2, Math.min(1.2, player.pitch));
