@@ -41,7 +41,7 @@ const MOVE = 15.4;
 const RUN = 25.2;
 const JUMP = 8.4;
 const GRAV = 28;
-const PAD_UP = 17.2;
+const PAD_UP = 24;
 const PLAYER_R = 0.32;
 const PLAYER_H = 1.58;
 const HEAD_MULT = 3.4;
@@ -1641,7 +1641,7 @@ function spawnEnemy(x, y, z, tough) {
 function markOpener(e) {
   if (!e) return;
   e.opener = true;
-  e.hp = e.max = 36;
+  e.hp = e.max = 70;
   e.body.material = new THREE.MeshBasicMaterial({ color: 0xd8b060 });
   e.head.material = new THREE.MeshBasicMaterial({ color: 0xf0d0a0 });
   const sash = new THREE.Mesh(
@@ -1693,10 +1693,56 @@ function spawnGibs(x, y, z, n, color) {
   }
 }
 
-function addDecal(x, y, z, wall) {
+function spawnOpenerGibs(x, y, z) {
+  SFX.gib();
+  const cols = [0xff2010, 0xc01008, 0xff4030, 0xf2c070, 0xe8a028, 0xfff0c8, 0x8a0000, 0xd84820];
+  for (let i = 0; i < 34; i++) {
+    const s = 0.55 + Math.random() * 0.95;
+    const m = new THREE.Mesh(
+      new THREE.BoxGeometry(s, s * (0.45 + Math.random() * 0.7), s * (0.55 + Math.random() * 0.4)),
+      new THREE.MeshBasicMaterial({ color: cols[i % cols.length] })
+    );
+    m.position.set(x + (Math.random() - 0.5) * 1.1, y + 0.2 + Math.random() * 1.3, z + (Math.random() - 0.5) * 1.1);
+    scene.add(m);
+    gibs.push({
+      mesh: m,
+      vx: (Math.random() - 0.5) * 5.2,
+      vy: 3.4 + Math.random() * 5.8,
+      vz: (Math.random() - 0.5) * 5.2,
+      life: 2.8 + Math.random() * 1.3
+    });
+  }
+  for (let i = 0; i < 12; i++) {
+    const s = 0.7 + Math.random() * 0.7;
+    const m = new THREE.Mesh(
+      new THREE.BoxGeometry(s, s * 0.55, s),
+      new THREE.MeshBasicMaterial({ color: cols[i % cols.length] })
+    );
+    m.position.set(x + (Math.random() - 0.5) * 0.9, 0.28 + Math.random() * 0.35, z + (Math.random() - 0.5) * 0.9);
+    scene.add(m);
+    gibs.push({
+      mesh: m,
+      vx: (Math.random() - 0.5) * 1.4,
+      vy: 1.2 + Math.random() * 2.2,
+      vz: (Math.random() - 0.5) * 1.4,
+      life: 3.4
+    });
+  }
+  for (let i = 0; i < 8; i++) {
+    addDecal(
+      x + (Math.random() - 0.5) * 1.8,
+      0,
+      z + (Math.random() - 0.5) * 1.8,
+      null,
+      2.1 + Math.random() * 1.6
+    );
+  }
+}
+
+function addDecal(x, y, z, wall, scale) {
   const d = new THREE.Mesh(
-    new THREE.CircleGeometry(0.32 + Math.random() * 0.45, 7),
-    new THREE.MeshBasicMaterial({ map: bloodTex, transparent: true, depthWrite: false, color: 0xaa2222 })
+    new THREE.CircleGeometry((scale || 1) * (0.32 + Math.random() * 0.45), 7),
+    new THREE.MeshBasicMaterial({ map: bloodTex, transparent: true, depthWrite: false, color: 0xcc1510 })
   );
   if (wall) {
     d.position.copy(wall.pos);
@@ -2143,14 +2189,17 @@ function hurtEnemy(e, dmg, part, hit) {
   hitMarkT = 0.22;
   if (e.head.material.emissive) e.head.material.emissive = new THREE.Color(part === "head" ? 0xcc2000 : 0x881000);
   else e.head.material.color.setHex(part === "head" ? 0xff4020 : 0xcc3010);
-  spawnGibs(e.x, 1.1, e.z, part === "head" ? 18 : 10);
   blast(0.05, 0.55, 1800, "highpass", 0.8);
   kick(90, 0.08, 0.45);
   playOsc(220, 0.07, "square", 0.16, 80);
-  addDecal(e.x, e.y + 0.02, e.z);
+  if (e.hp <= 0) {
+    killEnemy(e, part === "head" || dmg > 50);
+    return;
+  }
+  spawnGibs(e.x, 1.1, e.z, e.opener ? 14 : (part === "head" ? 18 : 10));
+  addDecal(e.x, e.y + 0.02, e.z, null, e.opener ? 2.2 : 1);
   const wall = nearestWallHit(e.x, 1.2, e.z);
-  if (wall) addDecal(e.x, 1.2, e.z, wall);
-  if (e.hp <= 0) killEnemy(e, part === "head" || dmg > 50);
+  if (wall) addDecal(e.x, 1.2, e.z, wall, e.opener ? 1.8 : 1);
 }
 
 function killEnemy(e, gibby) {
@@ -2158,10 +2207,11 @@ function killEnemy(e, gibby) {
   e.dead = true;
   e.state = "dead";
   SFX.death();
-  spawnGibs(e.x, 1.2, e.z, e.opener || gibby ? 42 : 24);
-  addDecal(e.x, e.y + 0.02, e.z);
+  if (e.opener) spawnOpenerGibs(e.x, 1.2, e.z);
+  else spawnGibs(e.x, 1.2, e.z, gibby ? 42 : 24);
+  addDecal(e.x, e.y + 0.02, e.z, null, e.opener ? 3.2 : 1);
   const wall = nearestWallHit(e.x, 1.1, e.z);
-  if (wall) addDecal(e.x, 1.1, e.z, wall);
+  if (wall) addDecal(e.x, 1.1, e.z, wall, e.opener ? 2.4 : 1);
   e.group.visible = false;
   if (performance.now() / 1000 > tauntT) {
     showMsg(TAUNTS[(Math.random() * TAUNTS.length) | 0], 800);
@@ -2431,12 +2481,22 @@ function feetOnPad(p) {
   return Math.abs(along) < hitR && Math.abs(across) < hitR;
 }
 
+function rideLaunchLook() {
+  if (!player) return;
+  if (player.y > 1.15) {
+    const t = Math.min(1, (player.y - 1.15) / 8);
+    player.pitch = openPitch + (-0.9 - openPitch) * t;
+  } else if (player.pitch < 0.08) {
+    player.pitch += (0.1 - player.pitch) * 0.2;
+  }
+}
+
 function bounceOff(p) {
   player.vy = PAD_UP;
   player.onGround = false;
   player.y += 0.5;
-  padAir = 1.2;
-  padBoost = 0.5;
+  padAir = 1.4;
+  padBoost = 0.28;
   p.cool = 0.7;
   p.flash = 1;
   SFX.pad();
@@ -2511,7 +2571,7 @@ function seatOpening() {
   clearLaunchLane(player.x, player.z, player.x - 16, player.z);
   aimEastYard();
   const padDist = 4.6;
-  const guardDist = 10.8;
+  const guardDist = 9.8;
   if (walkHitsWall(player.x, player.z, openFwdX, openFwdZ, 16)) {
     aimEastYard();
   }
@@ -3188,8 +3248,9 @@ function tick(dt) {
   if (lookFreeze > 0) {
     lookFreeze -= dt;
     player.yaw = openYaw;
-    player.pitch = openPitch;
+    if (player.y < 1.15 && padAir <= 0) player.pitch = openPitch;
   }
+  rideLaunchLook();
   if (padAir > 0) padAir -= dt;
   if (suppressShot > 0) suppressShot -= dt;
   if (invulnT > 0) invulnT -= dt;
@@ -3206,7 +3267,8 @@ function tick(dt) {
   if (actionHeld("left") || held.ArrowLeft) ix -= 1;
   if (actionHeld("right") || held.ArrowRight) ix += 1;
   const running = actionHeld("run");
-  const sp = running ? RUN : MOVE;
+  const air = padAir > 0 || player.y > 1.1;
+  const sp = (running ? RUN : MOVE) * (air ? 0.22 : 1);
   const len = Math.hypot(ix, iz) || 1;
   applyLook();
   const fwd = camForward();
@@ -3215,8 +3277,8 @@ function tick(dt) {
   let wishZ = ((-iz) * fwd.z + ix * rz) / len;
   if (padBoost > 0) {
     padBoost -= dt;
-    wishX += fwd.x * 0.85;
-    wishZ += fwd.z * 0.85;
+    wishX += openFwdX * 0.42;
+    wishZ += openFwdZ * 0.42;
   }
   const moving = ix || iz || padBoost > 0;
   const airborne = !player.onGround;
@@ -3360,10 +3422,13 @@ function tick(dt) {
     muzzle.intensity *= 0.55;
     if (muzzle.intensity < 0.2) { muzzle.intensity = 0; muzzle.visible = false; }
   }
-  camera.position.set(player.x, player.y + PLAYER_H + Math.sin(bob) * 0.22 - landDip * 0.28, player.z);
+  const airAmt = Math.min(1, Math.max(0, (player.y - 0.8) / 9));
+  camera.fov = FOV + airAmt * 14;
+  camera.updateProjectionMatrix();
+  camera.position.set(player.x, player.y + PLAYER_H + Math.sin(bob) * 0.22 * (1 - airAmt) - landDip * 0.28, player.z);
   camera.rotation.order = "YXZ";
   camera.rotation.y = -player.yaw + viewPunch * (pistolHand ? -0.09 : 0.09);
-  camera.rotation.x = player.pitch + gunKick + viewPunch * 0.35 + Math.sin(bob * 2) * (moving ? 0.035 : 0);
+  camera.rotation.x = player.pitch + gunKick + viewPunch * 0.35 + Math.sin(bob * 2) * (moving && !airAmt ? 0.035 : 0);
   camera.rotation.z = (moving ? -ix * 0.07 : camera.rotation.z * 0.8) + viewPunch * 0.14;
   if (gunRoot) {
     gunRoot.position.y = -0.08 + Math.sin(bob) * 0.02 - gunRecoil * 0.04;
