@@ -37,5 +37,5 @@ Bronze bounce pads launch you and keep run momentum. Several of them sit on the 
 
 ## Weapons
 
-Pistol at start, and it hits. MP40 and bazooka sit in the courtyard. Heat-seekers and drunk missiles are through the first door.
-Headshots count. Gibs and wall blood. Guns are layered synth cracks, not beeps.
+Dual pistols at start. MP40, bazooka, heat-seekers, and drunk missiles sit in the courtyard past the first guard.
+Headshots count. Gibs and wall blood. Guns are compressed noise cracks and low thumps, not oscillator spit.

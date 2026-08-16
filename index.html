@@ -54,8 +54,8 @@ const MAP = [
   "#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~##",
   "#~~~~S~~~~~~~~~~~~~~~~~~~~~~~~~~~~##",
   "#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~##",
-  "#~~~~~~~~~~~~~~1~~~~~~~~t~~~~~M~~~##",
-  "#~~~~~~~~~Z~~~~~~~~~~~~~~~~~~B~~~~##",
+  "#~~~~~~~~~~~~~~1~~~~~~~~t~~R~~M~~~##",
+  "#~~~~~~~~~Z~~~~~~~~~~U~~~~~~~B~~~~##",
   "#~~~~~~~~~~~~~~~~~~~~~T~~~~~~PQY.*##",
   "###########D########################",
   "#....1..R.U.^.....................##",
@@ -162,6 +162,7 @@ let pointerLocked = false;
 let started = false;
 let screen = "title";
 let ac;
+let gunIn;
 let titleMusic;
 let musicMuted = false;
 let musicReady = false;
@@ -196,15 +197,17 @@ try {
 } catch (err) {}
 
 const weps = [
-  { id: "pistol", name: "PISTOL", dmg: 42, rpm: 220, mag: 12, reserve: 80, spread: 0.01, auto: false, kick: 0.1 },
-  { id: "mp40", name: "MP40", dmg: 16, rpm: 540, mag: 32, reserve: 0, spread: 0.024, auto: true, kick: 0.045 },
-  { id: "bazooka", name: "BAZOOKA", dmg: 110, rpm: 55, mag: 6, reserve: 0, spread: 0, auto: false, kick: 0.14, rocket: "bazooka" },
-  { id: "heat", name: "SEEKER", dmg: 80, rpm: 70, mag: 5, reserve: 0, spread: 0, auto: false, kick: 0.11, rocket: "heat" },
-  { id: "drunk", name: "DRUNK", dmg: 38, rpm: 48, mag: 4, reserve: 0, spread: 0, auto: false, kick: 0.16, rocket: "drunk" }
+  { id: "pistol", name: "PISTOLS", dmg: 38, rpm: 310, mag: 24, reserve: 96, spread: 0.012, auto: false, kick: 0.22 },
+  { id: "mp40", name: "MP40", dmg: 18, rpm: 620, mag: 32, reserve: 0, spread: 0.028, auto: true, kick: 0.12 },
+  { id: "bazooka", name: "BAZOOKA", dmg: 130, rpm: 48, mag: 6, reserve: 0, spread: 0, auto: false, kick: 0.38, rocket: "bazooka" },
+  { id: "heat", name: "SEEKER", dmg: 90, rpm: 62, mag: 5, reserve: 0, spread: 0, auto: false, kick: 0.3, rocket: "heat" },
+  { id: "drunk", name: "DRUNK", dmg: 42, rpm: 42, mag: 4, reserve: 0, spread: 0, auto: false, kick: 0.34, rocket: "drunk" }
 ];
 let wepI = 0;
-let mag = [12, 0, 0, 0, 0];
-let reserve = [80, 0, 0, 0, 0];
+let mag = [24, 0, 0, 0, 0];
+let reserve = [96, 0, 0, 0, 0];
+let pistolHand = 0;
+let viewPunch = 0;
 let have = [true, false, false, false, false];
 let lastShot = 0;
 let reloading = 0;
@@ -425,25 +428,93 @@ function env(type, freq, Q) {
   return f;
 }
 
-function noiseBuf(dur) {
+function bangBuf(dur) {
   const n = ac.createBuffer(1, Math.max(1, (ac.sampleRate * dur) | 0), ac.sampleRate);
   const d = n.getChannelData(0);
-  for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / d.length);
+  let brown = 0;
+  const click = (ac.sampleRate * 0.003) | 0;
+  for (let i = 0; i < d.length; i++) {
+    const white = Math.random() * 2 - 1;
+    brown = brown * 0.97 + white * 0.03;
+    d[i] = (white * 0.52 + brown * 0.48) * (i < click ? 1.85 : 1);
+  }
   return n;
 }
 
-function playNoise(dur, vol, freq, type) {
+function gunDest() {
+  if (!ac) return null;
+  if (gunIn) return gunIn;
+  const comp = ac.createDynamicsCompressor();
+  comp.threshold.value = -14;
+  comp.knee.value = 6;
+  comp.ratio.value = 5;
+  comp.attack.value = 0.001;
+  comp.release.value = 0.14;
+  const shaper = ac.createWaveShaper();
+  const curve = new Float32Array(256);
+  for (let i = 0; i < 256; i++) {
+    const x = i / 128 - 1;
+    curve[i] = Math.tanh(x * 2.4);
+  }
+  shaper.curve = curve;
+  shaper.oversample = "2x";
+  const make = ac.createGain();
+  make.gain.value = 2.35;
+  comp.connect(shaper);
+  shaper.connect(make);
+  make.connect(ac.destination);
+  gunIn = comp;
+  return gunIn;
+}
+
+function outNode(dest) {
+  return dest || ac.destination;
+}
+
+function blast(dur, vol, freq, type, Q, dest) {
   if (!ac) return;
   const s = ac.createBufferSource();
-  s.buffer = noiseBuf(dur);
-  const f = env(type || "lowpass", freq || 1800, type === "bandpass" ? 1.2 : 0.8);
+  s.buffer = bangBuf(dur);
+  const f = env(type || "lowpass", freq || 1200, Q || 0.85);
   const g = ac.createGain();
   const t = ac.currentTime;
-  g.gain.setValueAtTime(0.0001, t);
-  g.gain.exponentialRampToValueAtTime(Math.max(0.001, vol), t + 0.004);
-  g.gain.exponentialRampToValueAtTime(0.001, t + dur);
-  s.connect(f); f.connect(g); g.connect(ac.destination);
+  g.gain.setValueAtTime(Math.max(0.001, vol), t);
+  g.gain.exponentialRampToValueAtTime(0.0008, t + dur);
+  s.connect(f); f.connect(g); g.connect(outNode(dest));
   s.start();
+}
+
+function kick(freq, dur, vol, dest) {
+  if (!ac) return;
+  const t = ac.currentTime;
+  const o = ac.createOscillator();
+  const g = ac.createGain();
+  o.type = "sine";
+  o.frequency.setValueAtTime(freq, t);
+  o.frequency.exponentialRampToValueAtTime(Math.max(16, freq * 0.22), t + dur);
+  g.gain.setValueAtTime(Math.max(0.001, vol), t);
+  g.gain.exponentialRampToValueAtTime(0.0008, t + dur);
+  o.connect(g); g.connect(outNode(dest));
+  o.start(t); o.stop(t + dur + 0.02);
+}
+
+function whoosh(dur, vol, startF, endF) {
+  if (!ac) return;
+  const t = ac.currentTime;
+  const s = ac.createBufferSource();
+  s.buffer = bangBuf(dur);
+  const f = env("bandpass", startF, 1.15);
+  f.frequency.setValueAtTime(startF, t);
+  f.frequency.exponentialRampToValueAtTime(Math.max(40, endF), t + dur);
+  const g = ac.createGain();
+  g.gain.setValueAtTime(Math.max(0.001, vol), t);
+  g.gain.exponentialRampToValueAtTime(0.0008, t + dur);
+  s.connect(f); f.connect(g); g.connect(gunDest() || ac.destination);
+  s.start();
+}
+
+function playNoise(dur, vol, freq, type) {
+  blast(dur, vol, freq, type || "lowpass", type === "bandpass" ? 1.4 : 0.85);
 }
 
 function playOsc(freq, dur, type, vol, slide) {
@@ -453,61 +524,71 @@ function playOsc(freq, dur, type, vol, slide) {
   const g = ac.createGain();
   o.type = type;
   o.frequency.setValueAtTime(freq, t);
-  if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(20, slide), t + dur);
-  g.gain.setValueAtTime(0.0001, t);
-  g.gain.exponentialRampToValueAtTime(Math.max(0.001, vol), t + 0.006);
-  g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+  if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(16, slide), t + dur);
+  g.gain.setValueAtTime(Math.max(0.001, vol), t);
+  g.gain.exponentialRampToValueAtTime(0.0008, t + dur);
   o.connect(g); g.connect(ac.destination);
-  o.start(t); o.stop(t + dur);
+  o.start(t); o.stop(t + dur + 0.02);
 }
 
 function thump(freq, dur, vol) {
-  playOsc(freq, dur, "sine", vol, freq * 0.35);
-  playOsc(freq * 0.55, dur * 1.15, "triangle", vol * 0.55, freq * 0.22);
+  kick(freq, dur, vol);
+  kick(freq * 0.5, dur * 1.2, vol * 0.45);
 }
 
 function crack(vol) {
-  playNoise(0.018, vol, 7000, "highpass");
-  playNoise(0.055, vol * 0.75, 2400, "bandpass");
+  blast(0.018, vol, 2800, "highpass", 0.7);
+  blast(0.08, vol * 0.85, 1400, "bandpass", 1.1);
 }
 
 const SFX = {
   shoot() {
-    crack(1.05);
-    playNoise(0.16, 0.72, 780, "lowpass");
-    playNoise(0.035, 0.55, 8200, "highpass");
-    thump(70, 0.16, 0.9);
-    playOsc(210, 0.045, "square", 0.2, 48);
+    const d = gunDest();
+    blast(0.016, 1.75, 2600, "highpass", 0.7, d);
+    blast(0.07, 1.6, 1350, "bandpass", 1.05, d);
+    blast(0.22, 1.5, 460, "lowpass", 0.62, d);
+    blast(0.4, 0.72, 150, "lowpass", 0.5, d);
+    kick(50, 0.3, 1.6, d);
+    kick(24, 0.46, 1.1, d);
   },
   mp40() {
-    crack(0.78);
-    playNoise(0.08, 0.55, 1000, "lowpass");
-    playNoise(0.02, 0.35, 7000, "highpass");
-    thump(84, 0.07, 0.62);
+    const d = gunDest();
+    blast(0.012, 1.4, 3000, "highpass", 0.8, d);
+    blast(0.048, 1.2, 1700, "bandpass", 1.25, d);
+    blast(0.1, 1.05, 640, "lowpass", 0.7, d);
+    kick(66, 0.11, 0.95, d);
   },
   bazooka() {
-    playNoise(0.2, 0.7, 1600, "bandpass");
-    playNoise(0.28, 0.55, 420, "lowpass");
-    thump(54, 0.24, 0.88);
-    playOsc(210, 0.2, "sawtooth", 0.22, 55);
+    const d = gunDest();
+    whoosh(0.38, 1.25, 1700, 200);
+    blast(0.2, 1.3, 820, "bandpass", 0.9, d);
+    blast(0.48, 1.4, 260, "lowpass", 0.58, d);
+    kick(38, 0.42, 1.55, d);
+    kick(20, 0.6, 1.15, d);
   },
   heat() {
-    playNoise(0.22, 0.52, 2400, "bandpass");
-    playOsc(480, 0.24, "sawtooth", 0.18, 80);
-    thump(66, 0.18, 0.7);
+    const d = gunDest();
+    whoosh(0.42, 1.05, 2300, 170);
+    blast(0.18, 1.05, 980, "bandpass", 1.15, d);
+    blast(0.34, 0.95, 360, "lowpass", 0.7, d);
+    kick(46, 0.34, 1.2, d);
+    playOsc(120, 0.34, "sine", 0.16, 48);
   },
   drunk() {
-    playNoise(0.16, 0.5, 1500, "bandpass");
-    playOsc(170, 0.14, "square", 0.16, 44);
-    playOsc(280, 0.18, "sawtooth", 0.14, 70);
-    thump(58, 0.2, 0.72);
+    const d = gunDest();
+    whoosh(0.4, 1.1, 1250, 150);
+    blast(0.22, 1.15, 680, "bandpass", 1.0, d);
+    blast(0.36, 1.0, 300, "lowpass", 0.65, d);
+    kick(42, 0.36, 1.25, d);
+    playOsc(64, 0.28, "sine", 0.18, 28);
   },
   boom() {
-    playNoise(0.5, 0.95, 280, "lowpass");
-    playNoise(0.2, 0.62, 2000, "highpass");
-    thump(42, 0.55, 1);
-    thump(88, 0.24, 0.55);
-    playOsc(32, 0.45, "sine", 0.48, 16);
+    const d = gunDest();
+    blast(0.72, 1.55, 170, "lowpass", 0.52, d);
+    blast(0.3, 1.15, 1200, "highpass", 0.62, d);
+    blast(0.42, 1.1, 480, "bandpass", 0.8, d);
+    kick(30, 0.68, 1.65, d);
+    kick(16, 0.9, 1.2, d);
   },
   reload() {
     playOsc(180, 0.06, "triangle", 0.12);
@@ -1135,74 +1216,69 @@ function metalMat(color) {
   });
 }
 
+function addPart(parent, geo, mat, x, y, z, rx, ry, rz) {
+  const m = new THREE.Mesh(geo, mat);
+  m.position.set(x, y, z);
+  m.rotation.set(rx || 0, ry || 0, rz || 0);
+  parent.add(m);
+  return m;
+}
+
+function buildPistol(name, x, y, z, yaw) {
+  const p = new THREE.Group();
+  p.name = name;
+  addPart(p, new THREE.BoxGeometry(0.1, 0.22, 0.11), metalMat(0x8a4a1c), 0, -0.12, 0.1, 0.38);
+  addPart(p, new THREE.BoxGeometry(0.12, 0.13, 0.32), metalMat(0xb8b898), 0, 0, -0.02);
+  addPart(p, new THREE.BoxGeometry(0.1, 0.075, 0.28), metalMat(0xd8d8b8), 0, 0.07, -0.04);
+  addPart(p, new THREE.BoxGeometry(0.05, 0.05, 0.26), metalMat(0xc8c8a8), 0, -0.01, -0.26);
+  addPart(p, new THREE.BoxGeometry(0.028, 0.055, 0.04), metalMat(0x9a9a80), 0, -0.08, 0.04);
+  addPart(p, new THREE.BoxGeometry(0.04, 0.03, 0.08), metalMat(0x333328), 0, 0.1, -0.2);
+  p.position.set(x, y, z);
+  p.rotation.y = yaw || 0;
+  return p;
+}
+
 function buildGun(id) {
   const g = new THREE.Group();
   if (id === "pistol") {
-    const grip = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.24, 0.12), metalMat(0x8a4a1c));
-    grip.position.set(0.3, -0.28, -0.36);
-    grip.rotation.x = 0.35;
-    const frame = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.14, 0.34), metalMat(0xb0b090));
-    frame.position.set(0.3, -0.16, -0.48);
-    const slide = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.08, 0.3), metalMat(0xd0d0b0));
-    slide.position.set(0.3, -0.1, -0.5);
-    const barrel = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.055, 0.24), metalMat(0xc8c8a8));
-    barrel.position.set(0.3, -0.15, -0.7);
-    const trigger = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.06, 0.04), metalMat(0x9a9a80));
-    trigger.position.set(0.3, -0.24, -0.42);
-    g.add(grip, frame, slide, barrel, trigger);
+    g.add(buildPistol("rightPistol", 0.3, -0.16, -0.48, 0));
+    g.add(buildPistol("leftPistol", -0.3, -0.14, -0.44, 0.1));
   } else if (id === "mp40") {
-    const rec = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.11, 0.38), metalMat(0xb8b898));
-    rec.position.set(0.28, -0.2, -0.55);
-    const wood = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.08, 0.18), metalMat(0x8a4a18));
-    wood.position.set(0.28, -0.28, -0.4);
-    const magz = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.24, 0.09), metalMat(0x9a9a78));
-    magz.position.set(0.28, -0.36, -0.52);
-    const barrel = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, 0.3), metalMat(0xc0c0a0));
-    barrel.position.set(0.28, -0.18, -0.84);
-    const jacket = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, 0.2), metalMat(0xa8a888));
-    jacket.position.set(0.28, -0.18, -0.78);
-    g.add(rec, wood, magz, barrel, jacket);
+    addPart(g, new THREE.BoxGeometry(0.11, 0.12, 0.46), metalMat(0xb8b898), 0.28, -0.18, -0.58);
+    addPart(g, new THREE.BoxGeometry(0.1, 0.09, 0.22), metalMat(0x8a4a18), 0.28, -0.26, -0.36);
+    addPart(g, new THREE.BoxGeometry(0.08, 0.07, 0.2), metalMat(0x6a3814), 0.28, -0.22, -0.2);
+    addPart(g, new THREE.BoxGeometry(0.055, 0.26, 0.09), metalMat(0x9a9a78), 0.28, -0.36, -0.54);
+    addPart(g, new THREE.BoxGeometry(0.05, 0.05, 0.32), metalMat(0xc0c0a0), 0.28, -0.16, -0.9);
+    addPart(g, new THREE.BoxGeometry(0.065, 0.065, 0.22), metalMat(0xa8a888), 0.28, -0.16, -0.8);
+    addPart(g, new THREE.BoxGeometry(0.03, 0.06, 0.08), metalMat(0xd0d0b0), 0.28, -0.08, -0.5);
   } else if (id === "bazooka") {
-    const tube = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.065, 0.76, 8), metalMat(0xc4b878));
-    tube.rotation.x = Math.PI / 2;
-    tube.position.set(0.3, -0.18, -0.62);
-    const wood = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.11, 0.2), metalMat(0x8a4a16));
-    wood.position.set(0.3, -0.28, -0.4);
-    const rear = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.055, 0.1, 8), metalMat(0xa8a880));
-    rear.rotation.x = Math.PI / 2;
-    rear.position.set(0.3, -0.18, -0.26);
-    const sight = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.09, 0.05), metalMat(0xd0d0b0));
-    sight.position.set(0.3, -0.1, -0.5);
-    g.add(tube, wood, rear, sight);
+    addPart(g, new THREE.CylinderGeometry(0.075, 0.085, 0.92, 8), metalMat(0xc4b878), 0.3, -0.16, -0.66, Math.PI / 2);
+    addPart(g, new THREE.CylinderGeometry(0.1, 0.1, 0.1, 8), metalMat(0x333328), 0.3, -0.16, -1.1, Math.PI / 2);
+    addPart(g, new THREE.CylinderGeometry(0.1, 0.07, 0.12, 8), metalMat(0xa8a880), 0.3, -0.16, -0.22, Math.PI / 2);
+    addPart(g, new THREE.BoxGeometry(0.1, 0.14, 0.2), metalMat(0x8a4a16), 0.3, -0.3, -0.4);
+    addPart(g, new THREE.BoxGeometry(0.04, 0.11, 0.06), metalMat(0xd0d0b0), 0.3, -0.06, -0.52);
+    addPart(g, new THREE.BoxGeometry(0.16, 0.04, 0.18), metalMat(0x6a5a30), 0.3, -0.06, -0.7);
   } else if (id === "heat") {
-    const tube = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.06, 0.64, 8), metalMat(0xb0b098));
-    tube.rotation.x = Math.PI / 2;
-    tube.position.set(0.28, -0.18, -0.58);
-    const nose = new THREE.Mesh(new THREE.ConeGeometry(0.055, 0.13, 8), metalMat(0xe04018));
-    nose.rotation.x = Math.PI / 2;
-    nose.position.set(0.28, -0.18, -0.92);
-    const box = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.11, 0.22), metalMat(0xc8a040));
-    box.position.set(0.28, -0.2, -0.4);
-    g.add(tube, nose, box);
+    addPart(g, new THREE.CylinderGeometry(0.07, 0.08, 0.78, 8), metalMat(0xb0b098), 0.28, -0.16, -0.62, Math.PI / 2);
+    addPart(g, new THREE.ConeGeometry(0.075, 0.16, 8), metalMat(0xe04018), 0.28, -0.16, -1.04, Math.PI / 2);
+    addPart(g, new THREE.BoxGeometry(0.14, 0.12, 0.24), metalMat(0xc8a040), 0.28, -0.2, -0.38);
+    addPart(g, new THREE.BoxGeometry(0.05, 0.05, 0.1), new THREE.MeshBasicMaterial({ color: 0xff5522 }), 0.28, -0.08, -0.5);
+    addPart(g, new THREE.BoxGeometry(0.09, 0.16, 0.1), metalMat(0x8a4a14), 0.28, -0.32, -0.34);
+    addPart(g, new THREE.CylinderGeometry(0.1, 0.1, 0.08, 8), metalMat(0x333328), 0.28, -0.16, -0.24, Math.PI / 2);
   } else {
-    const left = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.05, 0.52, 8), metalMat(0xd0b050));
-    const right = left.clone();
-    left.rotation.x = Math.PI / 2;
-    right.rotation.x = Math.PI / 2;
-    left.position.set(0.22, -0.18, -0.58);
-    right.position.set(0.34, -0.18, -0.58);
-    const body = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.13, 0.24), metalMat(0xc88828));
-    body.position.set(0.28, -0.22, -0.36);
-    const grip = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.15, 0.09), metalMat(0x8a4a14));
-    grip.position.set(0.28, -0.32, -0.32);
-    g.add(left, right, body, grip);
+    addPart(g, new THREE.CylinderGeometry(0.055, 0.065, 0.62, 8), metalMat(0xd0b050), 0.2, -0.16, -0.62, Math.PI / 2);
+    addPart(g, new THREE.CylinderGeometry(0.055, 0.065, 0.62, 8), metalMat(0xd0b050), 0.36, -0.16, -0.62, Math.PI / 2);
+    addPart(g, new THREE.BoxGeometry(0.26, 0.14, 0.28), metalMat(0xc88828), 0.28, -0.2, -0.34);
+    addPart(g, new THREE.BoxGeometry(0.06, 0.05, 0.16), metalMat(0x772200), 0.2, -0.08, -0.48);
+    addPart(g, new THREE.BoxGeometry(0.06, 0.05, 0.16), metalMat(0x772200), 0.36, -0.08, -0.48);
+    addPart(g, new THREE.BoxGeometry(0.09, 0.16, 0.1), metalMat(0x8a4a14), 0.28, -0.32, -0.3);
   }
   return g;
 }
 
 function setupGun() {
   gunRoot = new THREE.Group();
-  gunRoot.scale.set(1.15, 1.15, 1.15);
+  gunRoot.scale.set(1.42, 1.42, 1.42);
   camera.add(gunRoot);
   muzzle = new THREE.PointLight(0xffaa55, 0, 7);
   muzzle.position.set(0.24, -0.16, -0.92);
@@ -1240,9 +1316,20 @@ function fire() {
   lastShot = now;
   mag[wepI]--;
   gunKick = w.kick;
+  viewPunch = w.kick * 1.6;
   gunRecoil = 1;
-  if (muzzle) { muzzle.intensity = 5.5; muzzle.visible = true; }
-  if (gunFlash) { gunFlash.visible = true; gunFlash.rotation.z = Math.random() * 6; }
+  if (w.id === "pistol") pistolHand ^= 1;
+  const hx = w.id === "pistol" ? (pistolHand ? -0.3 : 0.3) : 0.28;
+  if (muzzle) {
+    muzzle.position.set(hx, -0.16, -0.98);
+    muzzle.intensity = w.rocket ? 7.2 : 6.2;
+    muzzle.visible = true;
+  }
+  if (gunFlash) {
+    gunFlash.position.set(hx, -0.18, -0.96);
+    gunFlash.visible = true;
+    gunFlash.rotation.z = Math.random() * 6;
+  }
   if (w.rocket) {
     if (w.id === "bazooka") SFX.bazooka();
     else if (w.id === "heat") SFX.heat();
@@ -1277,7 +1364,13 @@ function hitscan(w) {
     if (hit[0] && hit[0].distance < bestD) { best = b; bestD = hit[0].distance; part = "barrel"; }
   }
   const end = origin.clone().add(dir.clone().multiplyScalar(best ? bestD : 18));
-  addTracer(origin.clone().add(dir.clone().multiplyScalar(0.8)), end);
+  const right = new THREE.Vector3().crossVectors(dir, new THREE.Vector3(0, 1, 0)).normalize();
+  const hx = w.id === "pistol" ? (pistolHand ? -0.28 : 0.26) : 0.2;
+  const muzzlePos = origin.clone()
+    .add(dir.clone().multiplyScalar(0.75))
+    .add(right.multiplyScalar(hx))
+    .add(new THREE.Vector3(0, -0.12, 0));
+  addTracer(muzzlePos, end);
   if (!best) {
     const wall = nearestWallHit(end.x, end.y, end.z);
     if (wall) addDecal(end.x, end.y, end.z, wall);
@@ -1297,25 +1390,32 @@ function addTracer(a, b) {
 
 function makeRocketMesh(kind) {
   const g = new THREE.Group();
+  const fat = kind === "bazooka";
+  const bodyCol = kind === "drunk" ? 0xd88828 : kind === "heat" ? 0xc85018 : 0xd4b060;
   const body = new THREE.Mesh(
-    new THREE.CylinderGeometry(kind === "bazooka" ? 0.08 : 0.055, kind === "bazooka" ? 0.09 : 0.06, 0.42, 7),
-    metalMat(kind === "heat" ? 0x6a2010 : 0x4a3a18, kind === "heat" ? 0x331000 : 0x221100)
+    new THREE.CylinderGeometry(fat ? 0.12 : 0.08, fat ? 0.14 : 0.1, fat ? 0.72 : 0.55, 7),
+    metalMat(bodyCol)
   );
   body.rotation.x = Math.PI / 2;
   const nose = new THREE.Mesh(
-    new THREE.ConeGeometry(kind === "bazooka" ? 0.09 : 0.06, 0.16, 7),
-    metalMat(kind === "drunk" ? 0x8a6a20 : 0x8a3010, 0x401000)
+    new THREE.ConeGeometry(fat ? 0.14 : 0.1, fat ? 0.24 : 0.18, 7),
+    metalMat(kind === "heat" ? 0xff4410 : 0xf0d878)
   );
   nose.rotation.x = Math.PI / 2;
-  nose.position.z = -0.26;
-  const glow = new THREE.Mesh(new THREE.SphereGeometry(0.07, 6, 6), new THREE.MeshBasicMaterial({ color: 0xff6622 }));
-  glow.position.z = 0.22;
-  g.add(body, nose, glow);
+  nose.position.z = fat ? -0.46 : -0.36;
+  const fin = new THREE.Mesh(new THREE.BoxGeometry(fat ? 0.32 : 0.22, 0.04, 0.16), metalMat(0x8a6030));
+  fin.position.z = fat ? 0.28 : 0.2;
+  const glow = new THREE.Mesh(
+    new THREE.SphereGeometry(fat ? 0.11 : 0.08, 6, 6),
+    new THREE.MeshBasicMaterial({ color: kind === "drunk" ? 0xff7722 : kind === "heat" ? 0xff3311 : 0xffaa44 })
+  );
+  glow.position.z = fat ? 0.4 : 0.3;
+  g.add(body, nose, fin, glow);
   return g;
 }
 
 function spawnRocket(kind, origin, dir, wobble) {
-  const speed = kind === "bazooka" ? 28 : kind === "heat" ? 20 : 18;
+  const speed = kind === "bazooka" ? 26 : kind === "heat" ? 19 : 17;
   const mesh = makeRocketMesh(kind);
   mesh.position.copy(origin);
   mesh.lookAt(origin.clone().add(dir));
@@ -1325,26 +1425,26 @@ function spawnRocket(kind, origin, dir, wobble) {
     x: origin.x, y: origin.y, z: origin.z,
     vx: dir.x * speed, vy: dir.y * speed, vz: dir.z * speed,
     speed,
-    life: kind === "drunk" ? 2.4 : 2.8,
+    life: kind === "drunk" ? 2.6 : 2.8,
     phase: Math.random() * 6.3,
     wobble: wobble || 0,
-    dmg: kind === "bazooka" ? 110 : kind === "heat" ? 80 : 38,
-    radius: kind === "bazooka" ? 5.8 : kind === "heat" ? 4.2 : 3.4
+    dmg: kind === "bazooka" ? 130 : kind === "heat" ? 90 : 42,
+    radius: kind === "bazooka" ? 7.2 : kind === "heat" ? 4.6 : 3.6
   });
 }
 
 function launchRockets(w) {
   const dir = new THREE.Vector3();
   camera.getWorldDirection(dir);
-  const o = camera.getWorldPosition(new THREE.Vector3()).add(dir.clone().multiplyScalar(0.9));
+  const o = camera.getWorldPosition(new THREE.Vector3()).add(dir.clone().multiplyScalar(0.95));
   if (w.rocket === "drunk") {
-    for (let i = 0; i < 6; i++) {
+    for (let i = 0; i < 5; i++) {
       const d = dir.clone();
-      d.x += (Math.random() - 0.5) * 0.55;
-      d.y += (Math.random() - 0.5) * 0.22;
-      d.z += (Math.random() - 0.5) * 0.55;
+      d.x += (Math.random() - 0.5) * 0.48;
+      d.y += (Math.random() - 0.5) * 0.2;
+      d.z += (Math.random() - 0.5) * 0.48;
       d.normalize();
-      spawnRocket("drunk", o.clone(), d, 22 + Math.random() * 10);
+      spawnRocket("drunk", o.clone(), d, 68 + Math.random() * 28);
     }
   } else {
     spawnRocket(w.rocket, o, dir, 0);
@@ -1377,7 +1477,7 @@ function updateRockets(dt) {
       if (e) {
         const dx = e.x - r.x, dy = e.y + 1.05 - r.y, dz = e.z - r.z;
         const len = Math.hypot(dx, dy, dz) || 1;
-        const steer = 10 * dt;
+        const steer = 18 * dt;
         r.vx += (dx / len) * r.speed * steer;
         r.vy += (dy / len) * r.speed * steer;
         r.vz += (dz / len) * r.speed * steer;
@@ -1388,14 +1488,18 @@ function updateRockets(dt) {
       }
     }
     if (r.kind === "drunk") {
-      r.phase += dt * 14;
-      r.vx += Math.sin(r.phase) * r.wobble * dt;
-      r.vy += Math.cos(r.phase * 0.7) * r.wobble * 0.35 * dt;
-      r.vz += Math.cos(r.phase * 1.3) * r.wobble * dt;
+      r.phase += dt * 16;
+      const wx = Math.sin(r.phase) * 12 + Math.sin(r.phase * 2.2) * 6;
+      const wy = Math.cos(r.phase * 0.73) * 4.8;
+      const wz = Math.cos(r.phase * 1.37) * 12 + Math.sin(r.phase * 0.55) * 5;
+      r.x += (r.vx + wx) * dt;
+      r.y += (r.vy + wy) * dt;
+      r.z += (r.vz + wz) * dt;
+    } else {
+      r.x += r.vx * dt;
+      r.y += r.vy * dt;
+      r.z += r.vz * dt;
     }
-    r.x += r.vx * dt;
-    r.y += r.vy * dt;
-    r.z += r.vz * dt;
     r.life -= dt;
     r.mesh.position.set(r.x, r.y, r.z);
     r.mesh.lookAt(r.x + r.vx, r.y + r.vy, r.z + r.vz);
@@ -1425,7 +1529,7 @@ function updateRockets(dt) {
 
 function explode(x, y, z, dmg, radius) {
   SFX.boom();
-  spawnGibs(x, y, z, 18, 0x442200);
+  spawnGibs(x, y, z, radius > 6 ? 32 : 22, 0x442200);
   dmg = dmg == null ? 95 : dmg;
   radius = radius == null ? 5.6 : radius;
   for (const e of enemies) {
@@ -1593,9 +1697,13 @@ function resetPlayer() {
   };
   keys.gold = keys.silver = false;
   wepI = 0;
-  mag = [12, 0, 0, 0, 0];
-  reserve = [80, 0, 0, 0, 0];
+  mag = [24, 0, 0, 0, 0];
+  reserve = [96, 0, 0, 0, 0];
   have = [true, false, false, false, false];
+  pistolHand = 0;
+  viewPunch = 0;
+  gunKick = 0;
+  gunRecoil = 0;
   timeAlive = 0;
   invulnT = 2.6;
   if (gunRoot) swapGun();
@@ -2162,8 +2270,9 @@ function tick(dt) {
     }
   }
 
-  gunKick *= 0.82;
-  gunRecoil *= 0.78;
+  gunKick *= 0.84;
+  viewPunch *= 0.88;
+  gunRecoil *= 0.76;
   if (gunFlash && gunRecoil < 0.25) gunFlash.visible = false;
   if (muzzle && muzzle.intensity > 0) {
     muzzle.intensity *= 0.55;
@@ -2171,14 +2280,20 @@ function tick(dt) {
   }
   camera.position.set(player.x, player.y + PLAYER_H + Math.sin(bob) * 0.22 - landDip * 0.28, player.z);
   camera.rotation.order = "YXZ";
-  camera.rotation.y = player.yaw;
-  camera.rotation.x = player.pitch + gunKick + Math.sin(bob * 2) * (moving ? 0.035 : 0);
-  camera.rotation.z = moving ? -ix * 0.07 : camera.rotation.z * 0.8;
+  camera.rotation.y = player.yaw + viewPunch * (pistolHand ? -0.09 : 0.09);
+  camera.rotation.x = player.pitch + gunKick + viewPunch * 0.35 + Math.sin(bob * 2) * (moving ? 0.035 : 0);
+  camera.rotation.z = (moving ? -ix * 0.07 : camera.rotation.z * 0.8) + viewPunch * 0.14;
   if (gunRoot) {
-    gunRoot.position.y = Math.sin(bob) * 0.045 - gunRecoil * 0.04;
+    gunRoot.position.y = Math.sin(bob) * 0.045 - gunRecoil * 0.08;
     gunRoot.position.x = Math.cos(bob) * 0.02;
-    gunRoot.position.z = gunRecoil * 0.08;
-    gunRoot.rotation.x = gunRecoil * 0.18;
+    gunRoot.position.z = gunRecoil * 0.16;
+    gunRoot.rotation.x = gunRecoil * 0.32;
+    const left = gunRoot.getObjectByName("leftPistol");
+    const right = gunRoot.getObjectByName("rightPistol");
+    if (left && right) {
+      left.position.z = -0.44 + (pistolHand ? gunRecoil * 0.16 : 0);
+      right.position.z = -0.48 + (pistolHand ? 0 : gunRecoil * 0.16);
+    }
   }
 }
 
