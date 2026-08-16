@@ -71,23 +71,22 @@ const MAP = [
   "#####.......########################",
   "#####.......########################",
   "########D###########################",
-  "#######g.##########D################",
-  "#....1............#..^^....1......##",
-  "#..^^....#####....#...............##",
-  "#........#...#....#..F.F..........##",
-  "#....1...#...#....#..........H....##",
-  "#........#####....#..^^...........##",
-  "#.................#...............##",
-  "####D##############D################",
-  "#,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,##",
-  "#,,1,,,,^^,,,,,1,,,,,,L,,,,,1,,,,,##",
-  "#,,,,,,,,,,,,,,,,,,,,,,,,,,N,,,,,,##",
-  "#,,,,^^,,,,,,,,,,,,,,,,,,,,,,,,,,,##",
-  "##############l#####################",
-  "#......1............^.............##",
-  "#..^^...................1.........##",
+  "#.................................##",
+  "#..1....R.....................1...##",
+  "#.................................##",
+  "#.......L.........................##",
+  "#....F.......................F....##",
+  "####D###########...##########D######",
+  "#...#............1............#...##",
+  "#...#.........................#...##",
+  "####D###########...##########D######",
+  "#.................................##",
+  "#..............H..................##",
+  "########l###########################",
+  "#......1..........................##",
+  "#.................................##",
   "#.....................H...........##",
-  "#..............^..................##",
+  "#.................................##",
   "#...........................X.....##",
   "####################################"
 ];
@@ -2299,10 +2298,11 @@ function markHitDir(fromX, fromZ) {
 
 function hurtPlayer(n, fromX, fromZ) {
   if (!player || optionsOpen) return;
-  if (inCourtyard(player.x, player.z) && (invulnT > 0 || timeAlive < 3.2)) return;
+  if (invulnT > 0) return;
+  if (inCourtyard(player.x, player.z) && timeAlive < 3.2) return;
   const soak = Math.min(player.armor, n * 0.6);
   player.armor -= soak;
-  player.hp -= (n - soak);
+  player.hp = Math.max(0, player.hp - (n - soak));
   dmgT = 0.38;
   faceHurt = 0.45;
   markHitDir(fromX, fromZ);
@@ -2377,7 +2377,7 @@ function use() {
       if (d.kind === "gold" && player && player.z < d.z + 0.9) {
         goldDoorOpen = true;
         lookFreeze = 0;
-        invulnT = 0;
+        invulnT = 1.8;
         player.x = d.x;
         player.z = d.z + 2.15;
         player.y = 0;
@@ -2392,13 +2392,13 @@ function use() {
           if (e.dead || e.opener || inCourtyard(e.x, e.z)) continue;
           if (Math.hypot(e.x - player.x, e.z - player.z) < 14) {
             e.state = "shoot";
-            e.nextShot = 0.16;
+            e.nextShot = e.hall ? 0.75 : 0.45;
           }
         }
       }
       if (d.hallOut && player && player.z < d.z + 0.9) {
         lookFreeze = 0;
-        invulnT = 0;
+        invulnT = 0.9;
         player.x = d.x;
         player.z = d.z + 2.15;
         player.y = 0;
@@ -2412,9 +2412,31 @@ function use() {
         if (window.console) console.log("[ROTT] ROOM", player.x.toFixed(2), player.z.toFixed(2));
         for (const e of enemies) {
           if (e.dead || e.opener || inCourtyard(e.x, e.z)) continue;
+          if (e.z > d.z && e.z < d.z + 16) {
+            e.state = "shoot";
+            e.nextShot = 0.35;
+          }
+        }
+      }
+      if (d.floorOut && player && player.z < d.z + 0.9) {
+        lookFreeze = 0;
+        invulnT = 1.0;
+        player.x = d.x;
+        player.z = d.z + 2.15;
+        player.y = 0;
+        player.vy = 0;
+        lastSafe.x = player.x;
+        lastSafe.y = 0;
+        lastSafe.z = player.z;
+        player.yaw = Math.PI;
+        player.pitch = 0.04;
+        applyLook();
+        if (window.console) console.log("[ROTT] FLOOR", player.x.toFixed(2), player.z.toFixed(2));
+        for (const e of enemies) {
+          if (e.dead || e.opener || inCourtyard(e.x, e.z)) continue;
           if (e.z > d.z) {
             e.state = "shoot";
-            e.nextShot = 0.12;
+            e.nextShot = 0.85;
           }
         }
       }
@@ -2883,13 +2905,13 @@ function updateEnemy(e, dt) {
         e.nextShot = 0.35;
       } else {
         const chip = !!e.opener;
-        e.nextShot = e.tough ? 0.55 : (chip ? 2.1 : 0.7);
+        e.nextShot = e.tough ? 0.55 : (chip ? 2.1 : (e.hall ? 1.7 : (e.room ? 1.2 : 1.25)));
         SFX.enemyShot();
         const origin = new THREE.Vector3(e.x, 1.3, e.z);
         const dest = new THREE.Vector3(player.x, player.y + 1.3, player.z);
         addTracer(origin, dest);
-        const acc = e.tough ? 0.7 : (chip ? 0.16 : 0.92);
-        const dmg = e.tough ? 11 : (chip ? 2 : (e.room ? 9 : 7));
+        const acc = e.tough ? 0.7 : (chip ? 0.16 : (e.hall ? 0.4 : (e.room ? 0.62 : 0.5)));
+        const dmg = e.tough ? 11 : (chip ? 2 : (e.hall ? 5 : (e.room ? 6 : 6)));
         if (Math.random() < acc) hurtPlayer(dmg, e.x, e.z);
       }
     }
@@ -2912,6 +2934,7 @@ function buildLevel() {
   const mMonkCeil = new THREE.MeshLambertMaterial({ color: 0x1a2418, emissive: 0x08140c, flatShading: true });
   const mMonkFloor = new THREE.MeshLambertMaterial({ color: 0x5a2018, emissive: 0x220808, flatShading: true });
   const mMonkWall = mat(darkTex, 0x889090, 0x100808);
+  const mFloorCeil = new THREE.MeshLambertMaterial({ color: 0x4a4034, emissive: 0x181410, flatShading: true });
   const mGold = new THREE.MeshLambertMaterial({ color: 0xe0b020, emissive: 0x442200, flatShading: true });
   const mSilver = new THREE.MeshLambertMaterial({ color: 0xb8c0c8, emissive: 0x111122, flatShading: true });
   const mFire = new THREE.MeshLambertMaterial({ color: 0xff6622, emissive: 0xaa2200, flatShading: true });
@@ -2969,6 +2992,12 @@ function buildLevel() {
   const roomFill2 = new THREE.PointLight(0x40a060, 0.55, 12, 1.4);
   roomFill2.position.set(worldX(8), 2.8, worldZ(17));
   scene.add(roomFill2);
+  const floorFill = new THREE.PointLight(0xffd090, 0.8, 22, 1.15);
+  floorFill.position.set(worldX(8), 3.4, worldZ(22));
+  scene.add(floorFill);
+  const floorFill2 = new THREE.PointLight(0xc8b080, 0.55, 18, 1.3);
+  floorFill2.position.set(worldX(18), 3.2, worldZ(24));
+  scene.add(floorFill2);
   for (let r = 13; r <= 18; r++) {
     const runner = new THREE.Mesh(
       new THREE.BoxGeometry(1.15, 0.05, TILE),
@@ -3011,7 +3040,7 @@ function buildLevel() {
       fl.position.set(x, y0 - 0.11, z);
       scene.add(fl);
       if (!outdoor && ch !== "^") {
-        const ceilMat = r >= 8 && r <= 12 ? mHallCeil : (monk ? mMonkCeil : mCeil);
+        const ceilMat = r >= 8 && r <= 12 ? mHallCeil : (monk ? mMonkCeil : (r >= 20 ? mFloorCeil : mCeil));
         const ceil = new THREE.Mesh(new THREE.BoxGeometry(TILE, 0.16, TILE), ceilMat);
         ceil.position.set(x, WALL_H + 0.18, z);
         scene.add(ceil);
@@ -3052,6 +3081,7 @@ function buildLevel() {
         if (enemies.length > n) {
           const spawned = enemies[enemies.length - 1];
           if (r <= 7 && !enemies.some((en) => en.opener)) markOpener(spawned);
+          if (r >= 9 && r <= 11) spawned.hall = true;
           if (r >= 13 && r <= 18) {
             spawned.room = true;
             spawned.body.material = new THREE.MeshLambertMaterial({ color: 0x2a4a3a, emissive: 0x0a1810, flatShading: true });
@@ -3064,7 +3094,15 @@ function buildLevel() {
       if (ch === "2") spawnEnemy(x, 0, z, true);
       if (ch === "B") spawnBarrel(x, z);
       if (ch === "G") makeGoldKey(x, 0.85, z);
-      if (ch === "L") makePickup(x, -1.6, z, "silver", mSilver, "SILVER KEY");
+      if (ch === "L") {
+        makePickup(x, 0.85, z, "silver", mSilver, "SILVER KEY");
+        const tag = makeLabel("SILVER");
+        tag.position.set(x, 2.55, z);
+        scene.add(tag);
+        const lit = new THREE.PointLight(0xc8d8e8, 1.05, 14, 1.3);
+        lit.position.set(x, 2.4, z);
+        scene.add(lit);
+      }
       if (ch === "M") makePickup(x, 0.6, z, "mp40", new THREE.MeshLambertMaterial({ color: 0x2a2a22, flatShading: true }), "MP40");
       if (ch === "Z") makePickup(x, 0.6, z, "bazooka", new THREE.MeshLambertMaterial({ color: 0x4a3a14, emissive: 0x221100, flatShading: true }), "BAZOOKA");
       if (ch === "R") makePickup(x, 0.6, z, "heat", new THREE.MeshLambertMaterial({ color: 0x8a2010, emissive: 0x401000, flatShading: true }), "HEAT SEEKER");
@@ -3075,12 +3113,18 @@ function buildLevel() {
       if (ch === "D" || ch === "g" || ch === "l" || ch === "Q") {
         const kind = ch === "g" ? "gold" : ch === "l" ? "silver" : ch === "Q" ? "timed" : "free";
         const hallOut = kind === "free" && r === 12;
+        const floorOut = kind === "free" && r === 19;
         const doorMat = kind === "gold"
           ? (r <= 8 ? new THREE.MeshBasicMaterial({ color: 0xffc030 }) : mGold)
-          : kind === "silver" ? mSilver : (hallOut ? new THREE.MeshBasicMaterial({ color: 0x70a0a0 }) : mMetal);
-        const dm = boxAt(x, 0, z, TILE * 0.92, WALL_H - 0.12, (kind === "gold" && r <= 8) || hallOut ? 0.42 : 0.32, doorMat, true);
-        doors.push({ x, z, kind, mesh: dm, open: false, solid: solids[solids.length - 1], hallOut });
+          : kind === "silver" ? mSilver : (hallOut ? new THREE.MeshBasicMaterial({ color: 0x70a0a0 }) : (floorOut ? new THREE.MeshBasicMaterial({ color: 0xc8a050 }) : mMetal));
+        const dm = boxAt(x, 0, z, TILE * 0.92, WALL_H - 0.12, (kind === "gold" && r <= 8) || hallOut || floorOut ? 0.42 : 0.32, doorMat, true);
+        doors.push({ x, z, kind, mesh: dm, open: false, solid: solids[solids.length - 1], hallOut, floorOut });
         if (kind === "timed") timedDoor = doors[doors.length - 1];
+        if (kind === "silver") {
+          const tag = makeLabel("SILVER");
+          tag.position.set(x, 3.15, z - 0.35);
+          scene.add(tag);
+        }
         if (kind === "gold" && r <= 8) {
           const tag = makeLabel("GOLD");
           tag.position.set(x, 3.15, z - 0.4);
@@ -3094,6 +3138,14 @@ function buildLevel() {
           tag.position.set(x, 3.15, z - 0.35);
           scene.add(tag);
           const lit = new THREE.PointLight(0x80c0c0, 0.7, 10, 1.5);
+          lit.position.set(x, 3.1, z + 1.1);
+          scene.add(lit);
+        }
+        if (floorOut) {
+          const tag = makeLabel("FLOOR");
+          tag.position.set(x, 3.15, z - 0.35);
+          scene.add(tag);
+          const lit = new THREE.PointLight(0xe0b050, 0.75, 11, 1.5);
           lit.position.set(x, 3.1, z + 1.1);
           scene.add(lit);
         }
@@ -3143,10 +3195,7 @@ function buildLevel() {
     scene.add(disk);
   }
 
-  const extraPads = [
-    [12, 23, 0], [22, 23, 0], [8, 30, -2.2], [16, 32, -2.2],
-    [10, 35, 0], [20, 37, 0], [28, 26, 0]
-  ];
+  const extraPads = [];
   for (const [c, r, y] of extraPads) {
     if (c >= W || r >= H) continue;
     const ch = cell(c, r);
@@ -3469,6 +3518,11 @@ function tick(dt) {
       scene.fog.far = 40;
       scene.fog.color.setHex(0x1a120c);
       scene.background.setHex(0x140e0a);
+    } else if (pr >= 20) {
+      scene.fog.near = 18;
+      scene.fog.far = 88;
+      scene.fog.color.setHex(0x2a2418);
+      scene.background.setHex(0x1a1610);
     } else {
       scene.fog.near = 110;
       scene.fog.far = 220;
