@@ -190,6 +190,8 @@ let optionsReturn = "title";
 let slideDrag = false;
 let waitingBind = null;
 let optHits = [];
+let wantLock = false;
+let suppressShot = 0;
 let invulnT = 0;
 let lookSens = 1;
 let amb = { nodes: [], dripT: 0 };
@@ -240,6 +242,7 @@ function actionHeld(action) {
   const codes = binds[action];
   if (!codes) return false;
   for (let i = 0; i < codes.length; i++) if (held[codes[i]]) return true;
+  if (MOVE_ARROW[action] && held[MOVE_ARROW[action]]) return true;
   return false;
 }
 
@@ -1186,27 +1189,36 @@ function openOptions() {
   slideDrag = false;
   waitingBind = null;
   mouseDown = false;
+  wantLock = false;
+  suppressShot = 0;
   clearKeys();
   ui.style.pointerEvents = "auto";
   try { document.exitPointerLock(); } catch (err) {}
 }
 
-function closeOptions() {
+function closeOptions(viaClick) {
   if (!optionsOpen) return;
   optionsOpen = false;
   slideDrag = false;
   waitingBind = null;
   mouseDown = false;
+  suppressShot = 1;
+  wantLock = false;
   clearKeys();
   ui.style.pointerEvents = "none";
   releaseUiFocus();
-  screen = optionsReturn === "play" && started ? "play" : (started ? "play" : "title");
+  screen = started ? "play" : "title";
   if (screen === "play") {
     if (renderer && renderer.domElement) {
       renderer.domElement.tabIndex = 0;
       renderer.domElement.focus();
     }
-    lockPointer();
+    wantLock = true;
+    if (viaClick) {
+      lockPointer();
+    } else {
+      showMsg("CLICK TO LOOK", 1400);
+    }
   }
 }
 
@@ -2246,7 +2258,7 @@ function clickOptions(p) {
     waitingBind = null;
     return;
   }
-  if (id === "back") { closeOptions(); return; }
+  if (id === "back") { closeOptions(true); return; }
   waitingBind = waitingBind === id ? null : id;
 }
 
@@ -2264,7 +2276,12 @@ function bind() {
       }
     }
     if (!started) startGame();
-    if (!isLocked()) lockPointer();
+    if (started && screen === "play" && !isLocked()) {
+      wantLock = false;
+      lockPointer();
+    } else if (!isLocked()) {
+      lockPointer();
+    }
   };
   window.addEventListener("pointerdown", onStartClick, true);
   document.addEventListener("pointerlockchange", () => { pointerLocked = isLocked(); });
@@ -2292,7 +2309,7 @@ function bind() {
       e.preventDefault();
       if (e.code === "Escape") {
         if (waitingBind) waitingBind = null;
-        else closeOptions();
+        else closeOptions(false);
         return;
       }
       if (waitingBind) {
@@ -2333,7 +2350,8 @@ function bind() {
   window.addEventListener("mousedown", (e) => {
     if (!started || optionsOpen) return;
     if (e.button !== 0) return;
-    if (!isLocked()) { lockPointer(); }
+    if (!isLocked()) { wantLock = false; lockPointer(); }
+    if (suppressShot) { suppressShot = 0; return; }
     mouseDown = true;
     fire();
   }, true);
@@ -2370,10 +2388,10 @@ function tick(dt) {
   if (landDip > 0) landDip -= dt * 4;
 
   let ix = 0, iz = 0;
-  if (actionHeld("fwd")) iz -= 1;
-  if (actionHeld("back")) iz += 1;
-  if (actionHeld("left")) ix -= 1;
-  if (actionHeld("right")) ix += 1;
+  if (actionHeld("fwd") || held.ArrowUp) iz -= 1;
+  if (actionHeld("back") || held.ArrowDown) iz += 1;
+  if (actionHeld("left") || held.ArrowLeft) ix -= 1;
+  if (actionHeld("right") || held.ArrowRight) ix += 1;
   const running = actionHeld("run");
   const sp = running ? RUN : MOVE;
   const len = Math.hypot(ix, iz) || 1;
