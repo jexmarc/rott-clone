@@ -80,10 +80,9 @@ const MAP = [
   "#.................................##",
   "###########l###########D############",
   "#.................................##",
-  "#..............1..................##",
-  "#....D.....................D......##",
-  "#.................................##",
   "#..........X......................##",
+  "#....D.........1...........D......##",
+  "#.................................##",
   "####################################"
 ];
 
@@ -2365,7 +2364,7 @@ function win(secret) {
   started = false;
   screen = secret ? "secret" : "win";
   ui.style.pointerEvents = "none";
-  if (window.playTitleMusic) window.playTitleMusic();
+  if (window.console) console.log("[ROTT] EXIT", player.hp | 0, player.x.toFixed(2), player.z.toFixed(2));
 }
 
 function startReload() {
@@ -2474,8 +2473,9 @@ function use() {
         lastSafe.y = 0;
         lastSafe.z = player.z;
         player.yaw = Math.PI;
-        player.pitch = 0.04;
+        player.pitch = -0.04;
         applyLook();
+        showMsg("EXIT");
         if (window.console) console.log("[ROTT] SILVER DOOR", player.x.toFixed(2), player.z.toFixed(2));
         for (const e of enemies) {
           if (e.dead || e.opener || e.z <= d.z) continue;
@@ -3047,8 +3047,8 @@ function buildLevel() {
   const floorFill2 = new THREE.PointLight(0xffd080, 0.9, 22, 1.2);
   floorFill2.position.set(worldX(16), 3.3, worldZ(25));
   scene.add(floorFill2);
-  const exitFill = new THREE.PointLight(0x40e070, 0.95, 18, 1.2);
-  exitFill.position.set(worldX(12), 3.2, worldZ(30));
+  const exitFill = new THREE.PointLight(0x50ff80, 1.6, 20, 1.05);
+  exitFill.position.set(worldX(11), 3.2, worldZ(29));
   scene.add(exitFill);
   for (let r = 13; r <= 18; r++) {
     const runner = new THREE.Mesh(
@@ -3108,8 +3108,8 @@ function buildLevel() {
       const x = worldX(c), z = worldZ(r);
       const indoorN = !isWall(cell(c, r + 1)) && cell(c, r + 1) !== "~" && cell(c, r + 1) !== "S" && cell(c, r + 1) !== "t";
       const monkN = (r + 1) >= 13 && (r + 1) <= 18 && indoorN;
-      const shareN = (r + 1) >= 20 && (r + 1) <= 26 && indoorN;
-      const exitN = (r + 1) >= 27 && indoorN;
+      const shareN = r >= 20 && r <= 27;
+      const exitN = r >= 28;
       const sunken = cell(c, r + 1) === "," || cell(c, r - 1) === ",";
       boxAt(x, sunken ? -2.2 : 0, z, TILE, sunken ? WALL_H + 2.2 : WALL_H, TILE, sunken ? mDark : (monkN ? mMonkWall : (shareN ? mStone : (exitN ? mMetal : (indoorN ? mBlock : mStone)))), true);
     }
@@ -3207,11 +3207,25 @@ function buildLevel() {
         elevators.push({ x, z, mesh: plat, solid: solids[solids.length - 1], phase: 0 });
       }
       if (ch === "X") {
-        boxAt(x, 0, z, 1.5, 2.3, 0.18, mExit, false);
-        exitTrig = { x, z, r: 1.6 };
+        const gate = new THREE.MeshBasicMaterial({ color: 0x30f060 });
+        boxAt(x, 0, z, 3.2, 3.4, 0.46, gate, false);
+        boxAt(x - 1.7, 0, z, 0.38, 3.6, 0.7, gate, false);
+        boxAt(x + 1.7, 0, z, 0.38, 3.6, 0.7, gate, false);
+        boxAt(x, 3.2, z, 3.8, 0.38, 0.7, gate, false);
+        exitTrig = { x, z, r: 2.4 };
         const spr = makeLabel("EXIT");
-        spr.position.set(x, 2.7, z);
+        spr.scale.set(1.8, 1.8, 1);
+        spr.position.set(x, 3.55, z + 0.2);
         scene.add(spr);
+        const pad = new THREE.Mesh(
+          new THREE.BoxGeometry(2.6, 0.08, 2.2),
+          new THREE.MeshBasicMaterial({ color: 0x1ae050 })
+        );
+        pad.position.set(x, 0.06, z);
+        scene.add(pad);
+        const lit = new THREE.PointLight(0x40ff70, 2.2, 16, 1.1);
+        lit.position.set(x, 3.0, z + 0.8);
+        scene.add(lit);
       }
       if (ch === "*") makePickup(x, 0.6, z, "secret", mExit, "SECRET EXIT");
       if (ch === "T") {
@@ -3566,11 +3580,11 @@ function tick(dt) {
       scene.fog.far = 40;
       scene.fog.color.setHex(0x1a120c);
       scene.background.setHex(0x140e0a);
-    } else if (pr >= 27) {
-      scene.fog.near = 14;
-      scene.fog.far = 70;
-      scene.fog.color.setHex(0x143820);
-      scene.background.setHex(0x0c2014);
+    } else if (pr >= 28) {
+      scene.fog.near = 10;
+      scene.fog.far = 55;
+      scene.fog.color.setHex(0x1a5030);
+      scene.background.setHex(0x143828);
     } else if (pr >= 20) {
       scene.fog.near = 28;
       scene.fog.far = 120;
@@ -3733,7 +3747,7 @@ function tick(dt) {
     showMsg("TIMED DOOR SHUT");
   }
 
-  if (exitTrig && playerRow() >= 12 && Math.hypot(player.x - exitTrig.x, player.z - exitTrig.z) < 1.6) win(false);
+  if (exitTrig && playerRow() >= 12 && Math.hypot(player.x - exitTrig.x, player.z - exitTrig.z) < (exitTrig.r || 2.4)) win(false);
 
   if (reloading > 0) {
     reloading -= dt;
