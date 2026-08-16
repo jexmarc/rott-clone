@@ -154,7 +154,9 @@ let elevators = [];
 let barrels = [];
 let tracers = [];
 let rockets = [];
-let stepT = 0;
+let stepT = 99;
+let airT = 0;
+let footIn = null;
 let keys = { gold: false, silver: false };
 let player;
 let gunRoot, muzzle, gunFlash, gunLight;
@@ -533,7 +535,19 @@ function outNode(dest) {
   return dest || ac.destination;
 }
 
+function footDest() {
+  if (!ac) initAudio();
+  if (!ac) return null;
+  if (footIn) return footIn;
+  const g = ac.createGain();
+  g.gain.value = 2.25;
+  g.connect(ac.destination);
+  footIn = g;
+  return g;
+}
+
 function blast(dur, vol, freq, type, Q, dest) {
+  if (!ac) initAudio();
   if (!ac) return;
   const s = ac.createBufferSource();
   s.buffer = bangBuf(dur);
@@ -547,6 +561,7 @@ function blast(dur, vol, freq, type, Q, dest) {
 }
 
 function kick(freq, dur, vol, dest) {
+  if (!ac) initAudio();
   if (!ac) return;
   const t = ac.currentTime;
   const o = ac.createOscillator();
@@ -685,29 +700,39 @@ const SFX = {
     playNoise(0.16, 0.38, 1100, "bandpass");
     playOsc(70, 0.12, "square", 0.12, 30);
   },
-  jump() { playOsc(210, 0.06, "sine", 0.07, 130); },
+  jump() {
+    const d = footDest();
+    kick(180, 0.08, 0.28, d);
+    blast(0.08, 0.22, 900, "bandpass", 1.0, d);
+  },
+  air() {
+    const d = footDest();
+    blast(0.2, 0.42, 780, "bandpass", 0.85, d);
+    blast(0.16, 0.22, 1600, "highpass", 0.7, d);
+  },
   step(kind, run) {
-    const vol = run ? 0.58 : 0.44;
+    const d = footDest();
+    const vol = run ? 0.95 : 0.78;
     if (kind === "metal") {
-      kick(150, 0.055, vol * 0.42);
-      blast(0.055, vol * 0.5, 2400, "bandpass", 1.5);
-      blast(0.08, vol * 0.32, 700, "lowpass");
+      kick(155, 0.07, vol * 0.55, d);
+      blast(0.08, vol * 0.7, 2200, "bandpass", 1.4, d);
+      blast(0.11, vol * 0.45, 650, "lowpass", 0.8, d);
     } else if (kind === "dirt") {
-      kick(58, 0.11, vol * 0.72);
-      blast(0.1, vol * 0.48, 340, "lowpass");
-      blast(0.045, vol * 0.18, 1100, "highpass");
+      kick(54, 0.14, vol * 0.9, d);
+      blast(0.14, vol * 0.7, 320, "lowpass", 0.7, d);
+      blast(0.07, vol * 0.28, 1000, "highpass", 0.7, d);
     } else {
-      kick(76, 0.085, vol * 0.62);
-      blast(0.06, vol * 0.42, 980, "bandpass", 1.15);
-      blast(0.075, vol * 0.38, 400, "lowpass");
+      kick(72, 0.1, vol * 0.8, d);
+      blast(0.09, vol * 0.62, 920, "bandpass", 1.1, d);
+      blast(0.1, vol * 0.5, 380, "lowpass", 0.75, d);
     }
   },
   drip() {
-    playOsc(640 + Math.random() * 420, 0.07, "sine", 0.11, 200);
-    playNoise(0.04, 0.07, 2400, "highpass");
+    playOsc(640 + Math.random() * 420, 0.08, "sine", 0.16, 200);
+    playNoise(0.05, 0.1, 2400, "highpass");
   },
   crackle() {
-    blast(0.04, 0.07, 1800, "bandpass", 1.6);
+    blast(0.05, 0.12, 1800, "bandpass", 1.6);
   },
   enemyShot() {
     crack(0.28);
@@ -734,15 +759,16 @@ function stopAmbience() {
     try { if (n.disconnect) n.disconnect(); } catch (err) {}
   }
   amb.nodes = [];
-  amb.master = amb.windG = amb.airG = amb.torchG = amb.clothG = amb.droneG = null;
+  amb.master = amb.windG = amb.airG = amb.torchG = amb.clothG = amb.droneG = amb.rushG = null;
 }
 
 function startAmbience() {
   stopAmbience();
+  initAudio();
   if (!ac) return;
   try {
     const master = ac.createGain();
-    master.gain.value = 0.58;
+    master.gain.value = 0.92;
     master.connect(ac.destination);
     amb.master = master;
 
@@ -761,13 +787,14 @@ function startAmbience() {
 
     const brown = loopNoiseBuf(5.2, "brown");
     const pink = loopNoiseBuf(4.4, "pink");
-    amb.windG = layer(brown, "lowpass", 240, 0.7, 0.12);
-    amb.airG = layer(pink, "bandpass", 1100, 0.75, 0.06);
-    amb.torchG = layer(pink, "bandpass", 1700, 1.35, 0.045);
-    amb.clothG = layer(pink, "bandpass", 480, 0.9, 0.02);
+    amb.windG = layer(brown, "lowpass", 240, 0.7, 0.2);
+    amb.airG = layer(pink, "bandpass", 1100, 0.75, 0.1);
+    amb.torchG = layer(pink, "bandpass", 1700, 1.35, 0.08);
+    amb.clothG = layer(pink, "bandpass", 480, 0.9, 0.05);
+    amb.rushG = layer(pink, "highpass", 900, 0.7, 0.001);
 
     const droneG = ac.createGain();
-    droneG.gain.value = 0.034;
+    droneG.gain.value = 0.05;
     droneG.connect(master);
     amb.droneG = droneG;
     const d1 = ac.createOscillator();
@@ -808,18 +835,20 @@ function floorKind() {
   return "stone";
 }
 
-function updateAmbience(dt, moving, running) {
+function updateAmbience(dt, moving, running, airborne) {
   if (!started) return;
+  if (!ac) initAudio();
   if (!ac) return;
   if (!amb.master) startAmbience();
   if (!amb.master) return;
   const t = ac.currentTime;
   const yard = playerCell().r <= 7;
-  if (amb.windG) amb.windG.gain.setTargetAtTime(yard ? 0.14 : 0.032, t, 0.35);
-  if (amb.airG) amb.airG.gain.setTargetAtTime(yard ? 0.075 : 0.018, t, 0.35);
-  if (amb.torchG) amb.torchG.gain.setTargetAtTime((yard ? 0.028 : 0.07) * (0.65 + Math.random() * 0.55), t, 0.07);
-  if (amb.clothG) amb.clothG.gain.setTargetAtTime(moving ? (running ? 0.095 : 0.062) : 0.02, t, 0.12);
-  if (amb.droneG) amb.droneG.gain.setTargetAtTime(yard ? 0.026 : 0.042, t, 0.45);
+  if (amb.windG) amb.windG.gain.setTargetAtTime(yard ? 0.22 : 0.05, t, 0.3);
+  if (amb.airG) amb.airG.gain.setTargetAtTime(yard ? 0.12 : 0.03, t, 0.3);
+  if (amb.torchG) amb.torchG.gain.setTargetAtTime((yard ? 0.045 : 0.11) * (0.7 + Math.random() * 0.5), t, 0.07);
+  if (amb.clothG) amb.clothG.gain.setTargetAtTime(airborne ? 0.06 : (moving ? (running ? 0.2 : 0.14) : 0.045), t, 0.1);
+  if (amb.rushG) amb.rushG.gain.setTargetAtTime(airborne ? 0.18 : 0.001, t, 0.08);
+  if (amb.droneG) amb.droneG.gain.setTargetAtTime(yard ? 0.04 : 0.06, t, 0.4);
   amb.dripT -= dt;
   if (amb.dripT <= 0) {
     amb.dripT = yard ? 2.2 + Math.random() * 2.6 : 0.85 + Math.random() * 1.5;
@@ -2453,7 +2482,7 @@ function tick(dt) {
   else if (Math.random() < dt * 0.15) lightning = 1;
   if (!started || !player) return;
   if (optionsOpen) {
-    updateAmbience(dt, false, false);
+    updateAmbience(dt, false, false, false);
     return;
   }
   timeAlive += dt;
@@ -2475,17 +2504,27 @@ function tick(dt) {
   const wishX = (ix / len) * cy + (iz / len) * sy;
   const wishZ = (iz / len) * cy - (ix / len) * sy;
   const moving = ix || iz;
-  updateAmbience(dt, !!moving, running);
+  const airborne = !player.onGround;
+  updateAmbience(dt, !!moving, running, airborne);
   if (moving) {
     bob += dt * (running ? 26 : 17);
-    const period = running ? 0.27 : 0.41;
-    stepT += dt;
-    if (player.onGround && stepT >= period) {
-      stepT -= period;
-      SFX.step(floorKind(), running);
+    if (airborne) {
+      airT += dt;
+      if (airT >= 0.2) {
+        airT = 0;
+        SFX.air();
+      }
+    } else {
+      const period = running ? 0.26 : 0.4;
+      stepT += dt;
+      if (stepT >= period) {
+        stepT -= period;
+        SFX.step(floorKind(), running);
+      }
     }
   } else {
-    stepT = 0.3;
+    stepT = 99;
+    airT = 0;
   }
 
   if (actionHeld("jump") && player.onGround) { player.vy = JUMP; player.onGround = false; SFX.jump(); }
