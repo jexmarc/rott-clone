@@ -388,8 +388,10 @@ function boxAt(x, y, z, w, h, d, material, solid) {
 }
 
 function initAudio() {
-  if (!ac) ac = new (window.AudioContext || window.webkitAudioContext)();
-  if (ac.state === "suspended") ac.resume();
+  try {
+    if (!ac) ac = new (window.AudioContext || window.webkitAudioContext)();
+    if (ac && ac.state === "suspended") ac.resume();
+  } catch (err) {}
 }
 
 function setupTitleMusic() {
@@ -569,6 +571,7 @@ function stopAmbience() {
 function startAmbience() {
   stopAmbience();
   if (!ac) return;
+  try {
   const wind = ac.createBufferSource();
   wind.buffer = loopNoiseBuf(2.8);
   wind.loop = true;
@@ -587,6 +590,7 @@ function startAmbience() {
   torch.start();
   amb.nodes.push(wind, wf, wg, torch, tf, tg);
   amb.dripT = 0.8;
+  } catch (err) {}
 }
 
 const TAUNTS = [
@@ -2223,7 +2227,9 @@ function main() {
   setupTitleMusic();
   addEventListener("resize", () => {});
   loop();
-  if (location.search.indexOf("autostart") >= 0) startGame();
+  if (location.search.indexOf("autostart") >= 0) {
+    try { startGame(); } catch (err) {}
+  }
 }
 
 window.addEventListener("load", () => {
