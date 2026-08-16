@@ -51,10 +51,10 @@ const UH = 200;
 const MAP = [
   "####################################",
   "#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~##",
-  "#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~##",
-  "#~~~S~~~~~~~~~~~~~~~~~t~~~~~~M~~~~##",
+  "#~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~##",
+  "#~~~S~~~~~~~~~~~1~~~~~t~~~~~~M~~~~##",
   "#~~~~~~~~~Z~~~########~~~~~~~~B~~~##",
-  "#~~~~~~~~~~~~~~~#1#~~~T~~~~~~PQY.*##",
+  "#~~~~~~~~~~~~~~~~~~~~~T~~~~~~PQY.*##",
   "###########D########################",
   "#....1..R.U.^.....................##",
   "#.........^^.........1............##",
@@ -541,9 +541,9 @@ const SFX = {
   },
   jump() { playOsc(210, 0.06, "sine", 0.07, 130); },
   step() {
-    thump(96 + Math.random() * 18, 0.07, 0.22);
-    playNoise(0.055, 0.11, 620, "lowpass");
-    playNoise(0.03, 0.05, 1800, "highpass");
+    thump(88 + Math.random() * 22, 0.09, 0.42);
+    playNoise(0.07, 0.22, 540, "lowpass");
+    playNoise(0.04, 0.1, 1600, "highpass");
   },
   drip() {
     playOsc(720 + Math.random() * 380, 0.045, "sine", 0.055, 280);
@@ -583,7 +583,7 @@ function startAmbience() {
   wind.loop = true;
   const wf = env("lowpass", 260, 0.65);
   const wg = ac.createGain();
-  wg.gain.value = 0.05;
+  wg.gain.value = 0.09;
   wind.connect(wf); wf.connect(wg); wg.connect(ac.destination);
   wind.start();
   const torch = ac.createBufferSource();
@@ -591,10 +591,17 @@ function startAmbience() {
   torch.loop = true;
   const tf = env("bandpass", 1500, 1.3);
   const tg = ac.createGain();
-  tg.gain.value = 0.03;
+  tg.gain.value = 0.055;
   torch.connect(tf); tf.connect(tg); tg.connect(ac.destination);
   torch.start();
-  amb.nodes.push(wind, wf, wg, torch, tf, tg);
+  const hum = ac.createOscillator();
+  hum.type = "sine";
+  hum.frequency.value = 58;
+  const hg = ac.createGain();
+  hg.gain.value = 0.035;
+  hum.connect(hg); hg.connect(ac.destination);
+  hum.start();
+  amb.nodes.push(wind, wf, wg, torch, tf, tg, hum, hg);
   amb.dripT = 0.8;
   } catch (err) {}
 }
@@ -954,6 +961,8 @@ function makeLabel(text) {
 }
 
 function placePad(x, y, z) {
+  const s = findCell("S");
+  if (Math.hypot(x - worldX(s.c), z - worldZ(s.r)) < TILE * 2.4) return;
   const group = new THREE.Group();
   const base = new THREE.Mesh(new THREE.CylinderGeometry(1.12, 1.18, 0.16, 12), mat(metalTex, 0x665544));
   const disk = new THREE.Mesh(new THREE.CylinderGeometry(1.05, 1.08, 0.1, 12), mat(padTex, 0xffffff, 0x221100));
@@ -1187,7 +1196,7 @@ function buildGun(id) {
 
 function setupGun() {
   gunRoot = new THREE.Group();
-  gunRoot.scale.set(2.15, 2.15, 2.15);
+  gunRoot.scale.set(1.15, 1.15, 1.15);
   camera.add(gunRoot);
   muzzle = new THREE.PointLight(0xffaa55, 0, 7);
   muzzle.position.set(0.24, -0.16, -0.92);
@@ -1860,6 +1869,11 @@ function setKey(e, down) {
   if (k === "m") keysDown.KeyM = down;
   if (k === " ") keysDown.Space = down;
   if (k === "shift") { keysDown.ShiftLeft = down; keysDown.ShiftRight = down; }
+  if (k === "control" || e.code === "ControlLeft" || e.code === "ControlRight") {
+    keysDown.ControlLeft = down;
+    keysDown.ControlRight = down;
+  }
+  if (k === "enter" || e.code === "Enter" || e.code === "NumpadEnter") keysDown.Enter = down;
   if (k === "1") keysDown.Digit1 = down;
   if (k === "2") keysDown.Digit2 = down;
   if (k === "3") keysDown.Digit3 = down;
@@ -1966,6 +1980,10 @@ function bind() {
       return;
     }
     if (!started) return;
+    if (e.code === "ControlLeft" || e.code === "ControlRight" || e.code === "Enter" || e.code === "NumpadEnter" || e.key === "Enter") {
+      e.preventDefault();
+      fire();
+    }
     if (e.code === "KeyE" || e.key === "e" || e.key === "E") use();
     if (e.code === "KeyR" || e.key === "r" || e.key === "R") startReload();
     if ((e.code === "Digit1" || e.key === "1") && have[0]) { wepI = 0; swapGun(); }
@@ -1973,7 +1991,7 @@ function bind() {
     if ((e.code === "Digit3" || e.key === "3") && have[2]) { wepI = 2; swapGun(); }
     if ((e.code === "Digit4" || e.key === "4") && have[3]) { wepI = 3; swapGun(); }
     if ((e.code === "Digit5" || e.key === "5") && have[4]) { wepI = 4; swapGun(); }
-    if (/^(Space|Arrow|KeyW|KeyA|KeyS|KeyD|Shift)/.test(e.code) || e.key === " ") e.preventDefault();
+    if (/^(Space|Arrow|KeyW|KeyA|KeyS|KeyD|Shift|Control|Enter)/.test(e.code) || e.key === " ") e.preventDefault();
   }, true);
   window.addEventListener("keyup", (e) => { setKey(e, false); }, true);
   window.addEventListener("mousedown", (e) => {
@@ -2031,7 +2049,7 @@ function tick(dt) {
   if (moving) {
     bob += dt * (running ? 20 : 13);
     stepT += dt * (running ? 5.2 : 3.4);
-    if (player.onGround && stepT > 1) { stepT = 0; SFX.step(); }
+    if (player.onGround && stepT > 0.72) { stepT = 0; SFX.step(); }
   }
 
   if (k.Space && player.onGround) { player.vy = JUMP; player.onGround = false; SFX.jump(); }
@@ -2107,7 +2125,7 @@ function tick(dt) {
     reloading -= dt;
     if (reloading <= 0) finishReload();
   }
-  if (mouseDown && currentWep().auto) fire();
+  if ((mouseDown || keysDown.ControlLeft || keysDown.ControlRight || keysDown.Enter) && currentWep().auto) fire();
 
   for (const e of enemies) updateEnemy(e, dt);
   updateRockets(dt);
