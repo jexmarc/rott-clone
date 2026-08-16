@@ -18,14 +18,14 @@ Or open `index.html` directly. A local server is safer for the audio file.
 ## Controls
 
 - Click to play (one click). Pointer lock and mouse look start on that click.
-- WASD move, Shift run, Space jump, mouse look. These work even if lock is refused.
+- WASD or arrow keys move, Shift run, Space jump, mouse look. These work even if lock is refused.
 - Left click fire, R reload, 1-5 weapons, E use / pushwall
 - M mutes the title track. There is no MUTE button.
-- Escape unlocks the mouse
+- ESC opens Options (look sensitivity, saved). ESC again goes back and relocks the mouse.
 
 ## Level flow (shareware E1A1 shape)
 
-1. Spawn on courtyard dirt facing open yard: floor, walls, sky, a guard ahead
+1. Spawn on courtyard dirt facing open yard. First grunt is behind cover, not on the sightline.
 2. Main door in the south wall into the hall, then the hub
 3. Bounce pads later, up to the east catwalk for the gold key
 4. Gold door north into the jagged / pillar wing
@@ -37,5 +37,5 @@ Bronze bounce pads launch you and keep run momentum. Several of them sit on the 
 
 ## Weapons
 
-Pistol at start. MP40, bazooka, heat-seekers, and drunk missiles are pickups.
+Pistol at start, and it hits. MP40 and bazooka sit in the courtyard. Heat-seekers and drunk missiles are through the first door.
 Headshots count. Gibs and wall blood. Guns are layered synth cracks, not beeps.

@@ -52,11 +52,11 @@ const MAP = [
   "####################################",
   "#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~##",
   "#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~##",
-  "#~~~S~~~~~~1~~~~~~~~~~t~~~~~~M~~~~##",
-  "#~~~~~~~~~~~~~~~~Z~~~~~1~~~~~B~~~~##",
-  "#~~~~~~~~~~~~~~~~~~~~~T~~~~~~PQY.*##",
+  "#~~~S~~~~~~~~~~~~~~~~~t~~~~~~M~~~~##",
+  "#~~~~~~~~~Z~~~########~~~~~~~~B~~~##",
+  "#~~~~~~~~~~~~~~~#1#~~~T~~~~~~PQY.*##",
   "###########D########################",
-  "#....1..R..^......................##",
+  "#....1..R.U.^.....................##",
   "#.........^^.........1............##",
   "#....A............................##",
   "##########D#########################",
@@ -178,9 +178,19 @@ let faceHurt = 0;
 let landDip = 0;
 let wasOnGround = false;
 let held = {};
+let optionsOpen = false;
+let slideDrag = false;
+let invulnT = 0;
+let lookSens = 1;
+let amb = { nodes: [], dripT: 0 };
+
+try {
+  const stored = parseFloat(localStorage.getItem("rott-look-sens"));
+  if (stored >= 0.3 && stored <= 2.5) lookSens = stored;
+} catch (err) {}
 
 const weps = [
-  { id: "pistol", name: "PISTOL", dmg: 26, rpm: 200, mag: 12, reserve: 48, spread: 0.01, auto: false, kick: 0.08 },
+  { id: "pistol", name: "PISTOL", dmg: 42, rpm: 220, mag: 12, reserve: 80, spread: 0.01, auto: false, kick: 0.1 },
   { id: "mp40", name: "MP40", dmg: 16, rpm: 540, mag: 32, reserve: 0, spread: 0.024, auto: true, kick: 0.045 },
   { id: "bazooka", name: "BAZOOKA", dmg: 110, rpm: 55, mag: 6, reserve: 0, spread: 0, auto: false, kick: 0.14, rocket: "bazooka" },
   { id: "heat", name: "SEEKER", dmg: 80, rpm: 70, mag: 5, reserve: 0, spread: 0, auto: false, kick: 0.11, rocket: "heat" },
@@ -188,7 +198,7 @@ const weps = [
 ];
 let wepI = 0;
 let mag = [12, 0, 0, 0, 0];
-let reserve = [48, 0, 0, 0, 0];
+let reserve = [80, 0, 0, 0, 0];
 let have = [true, false, false, false, false];
 let lastShot = 0;
 let reloading = 0;
@@ -282,9 +292,9 @@ function makeTextures() {
     const tile = (x >> 4) ^ (y >> 4);
     const n = (hash(x, y) * 22) | 0;
     const edge = (x & 15) < 1 || (y & 15) < 1;
-    if (edge) return [118, 82, 46];
-    const b = tile ? 198 : 172;
-    return [b + n, 132 + n * 0.5, 72];
+    if (edge) return [86, 58, 28];
+    const b = tile ? 236 : 208;
+    return [b + n, 168 + n * 0.45, 92];
   });
   metalTex = texNoise(64, (x, y) => {
     const n = (hash(x, y) * 14) | 0;
@@ -522,12 +532,62 @@ const SFX = {
     playOsc(70, 0.12, "square", 0.12, 30);
   },
   jump() { playOsc(210, 0.06, "sine", 0.07, 130); },
-  step() { thump(110, 0.05, 0.12); playNoise(0.04, 0.06, 700, "lowpass"); },
+  step() {
+    thump(96 + Math.random() * 18, 0.07, 0.22);
+    playNoise(0.055, 0.11, 620, "lowpass");
+    playNoise(0.03, 0.05, 1800, "highpass");
+  },
+  drip() {
+    playOsc(720 + Math.random() * 380, 0.045, "sine", 0.055, 280);
+    playNoise(0.025, 0.035, 2600, "highpass");
+  },
   enemyShot() {
     crack(0.28);
     thump(70, 0.06, 0.18);
   }
 };
+
+function loopNoiseBuf(dur) {
+  const n = ac.createBuffer(1, Math.max(1, (ac.sampleRate * dur) | 0), ac.sampleRate);
+  const d = n.getChannelData(0);
+  let last = 0;
+  for (let i = 0; i < d.length; i++) {
+    last = last * 0.94 + (Math.random() * 2 - 1) * 0.06;
+    d[i] = last;
+  }
+  return n;
+}
+
+function stopAmbience() {
+  for (const n of amb.nodes) {
+    try { if (n.stop) n.stop(); } catch (err) {}
+    try { if (n.disconnect) n.disconnect(); } catch (err) {}
+  }
+  amb.nodes = [];
+}
+
+function startAmbience() {
+  stopAmbience();
+  if (!ac) return;
+  const wind = ac.createBufferSource();
+  wind.buffer = loopNoiseBuf(2.8);
+  wind.loop = true;
+  const wf = env("lowpass", 260, 0.65);
+  const wg = ac.createGain();
+  wg.gain.value = 0.05;
+  wind.connect(wf); wf.connect(wg); wg.connect(ac.destination);
+  wind.start();
+  const torch = ac.createBufferSource();
+  torch.buffer = loopNoiseBuf(1.6);
+  torch.loop = true;
+  const tf = env("bandpass", 1500, 1.3);
+  const tg = ac.createGain();
+  tg.gain.value = 0.03;
+  torch.connect(tf); tf.connect(tg); tg.connect(ac.destination);
+  torch.start();
+  amb.nodes.push(wind, wf, wg, torch, tf, tg);
+  amb.dripT = 0.8;
+}
 
 const TAUNTS = [
   "SPLIT YOU LIKE FIREWOOD",
@@ -762,6 +822,78 @@ function paintHUD(g) {
     g.fillStyle = "#fff8e0";
     g.fillRect(mx + pc * sw - 1, my + pr * sh - 1, 2, 2);
   }
+}
+
+function paintOptions(g) {
+  g.fillStyle = "rgba(8,4,2,0.72)";
+  g.fillRect(0, 0, UW, UH);
+  g.fillStyle = "#1a1008";
+  g.fillRect(48, 28, 224, 144);
+  g.fillStyle = "#6a4030";
+  g.fillRect(48, 28, 224, 2);
+  g.fillRect(48, 170, 224, 2);
+  g.fillRect(48, 28, 2, 144);
+  g.fillRect(270, 28, 2, 144);
+  g.fillStyle = "#3a2414";
+  g.fillRect(50, 30, 220, 1);
+  drawText3D(g, "OPTIONS", 160, 40, "#f0c44a", "#6a3a08", 2);
+  drawText(g, "LOOK SENS", 160, 72, "#c9a66b", 1, "center");
+  const x0 = 72, x1 = 248, y = 92, w = x1 - x0;
+  g.fillStyle = "#2a1810";
+  g.fillRect(x0, y, w, 10);
+  g.fillStyle = "#8a5a28";
+  g.fillRect(x0, y, w, 1);
+  g.fillRect(x0, y + 9, w, 1);
+  const t = (lookSens - 0.3) / 2.2;
+  const kx = x0 + t * w;
+  g.fillStyle = "#c88830";
+  g.fillRect(x0, y + 3, Math.max(2, kx - x0), 4);
+  g.fillStyle = "#f0d060";
+  g.fillRect(kx - 3, y - 2, 6, 14);
+  const label = lookSens.toFixed(1) + "X";
+  drawText(g, label, 160, 112, "#f0d080", 1, "center");
+  drawText(g, "ARROWS OR DRAG", 160, 132, "#886848", 1, "center");
+  drawText(g, "ESC BACK", 160, 150, "#e8d0a0", 1, "center");
+}
+
+function setSens(v) {
+  lookSens = Math.max(0.3, Math.min(2.5, v));
+  try { localStorage.setItem("rott-look-sens", String(lookSens)); } catch (err) {}
+}
+
+function optionsSliderAt(x, y) {
+  return x >= 68 && x <= 252 && y >= 84 && y <= 110;
+}
+
+function sensFromUiX(x) {
+  const t = Math.max(0, Math.min(1, (x - 72) / 176));
+  setSens(0.3 + t * 2.2);
+}
+
+function uiPos(e) {
+  const r = ui.getBoundingClientRect();
+  return { x: (e.clientX - r.left) / r.width * UW, y: (e.clientY - r.top) / r.height * UH };
+}
+
+function openOptions() {
+  if (!started || optionsOpen) return;
+  optionsOpen = true;
+  screen = "options";
+  slideDrag = false;
+  mouseDown = false;
+  held = {};
+  ui.style.pointerEvents = "auto";
+  try { document.exitPointerLock(); } catch (err) {}
+}
+
+function closeOptions() {
+  if (!optionsOpen) return;
+  optionsOpen = false;
+  slideDrag = false;
+  screen = "play";
+  ui.style.pointerEvents = "none";
+  if (renderer && renderer.domElement) renderer.domElement.focus();
+  lockPointer();
 }
 
 function paintEnd(g, title, sub) {
@@ -1314,6 +1446,7 @@ function killEnemy(e, gibby) {
 }
 
 function hurtPlayer(n) {
+  if (!player || optionsOpen || invulnT > 0 || timeAlive < 2.6) return;
   const soak = Math.min(player.armor, n * 0.6);
   player.armor -= soak;
   player.hp -= (n - soak);
@@ -1325,18 +1458,26 @@ function hurtPlayer(n) {
 
 function die() {
   pointerLocked = false;
+  optionsOpen = false;
+  slideDrag = false;
+  stopAmbience();
   document.exitPointerLock();
   started = false;
   screen = "dead";
+  ui.style.pointerEvents = "none";
   ui.classList.remove("play");
   if (window.playTitleMusic) window.playTitleMusic();
 }
 
 function win(secret) {
   pointerLocked = false;
+  optionsOpen = false;
+  slideDrag = false;
+  stopAmbience();
   document.exitPointerLock();
   started = false;
   screen = secret ? "secret" : "win";
+  ui.style.pointerEvents = "none";
   ui.classList.remove("play");
   if (window.playTitleMusic) window.playTitleMusic();
 }
@@ -1424,25 +1565,38 @@ function resetPlayer() {
   keys.gold = keys.silver = false;
   wepI = 0;
   mag = [12, 0, 0, 0, 0];
-  reserve = [48, 0, 0, 0, 0];
+  reserve = [80, 0, 0, 0, 0];
   have = [true, false, false, false, false];
   timeAlive = 0;
+  invulnT = 2.6;
   if (gunRoot) swapGun();
+}
+
+function losBlock(ch) {
+  return isWall(ch) || ch === "D" || ch === "g" || ch === "l" || ch === "Q" || ch === "t";
 }
 
 function blockedCell(x, z) {
   const c = Math.round(x / TILE + W / 2);
   const r = Math.round(z / TILE + 2);
-  return isWall(cell(c, r)) || cell(c, r) === "D" || cell(c, r) === "g" || cell(c, r) === "l" || cell(c, r) === "Q";
+  return losBlock(cell(c, r));
 }
 
 function hasLOS(e) {
-  const steps = 10;
-  for (let i = 1; i < steps; i++) {
-    const t = i / steps;
-    const x = e.x + (player.x - e.x) * t;
-    const z = e.z + (player.z - e.z) * t;
-    if (blockedCell(x, z)) return false;
+  let c0 = Math.round(e.x / TILE + W / 2);
+  let r0 = Math.round(e.z / TILE + 2);
+  const c1 = Math.round(player.x / TILE + W / 2);
+  const r1 = Math.round(player.z / TILE + 2);
+  const dc = Math.abs(c1 - c0), dr = Math.abs(r1 - r0);
+  const sc = c0 < c1 ? 1 : -1, sr = r0 < r1 ? 1 : -1;
+  let err = dc - dr;
+  let c = c0, r = r0;
+  while (c !== c1 || r !== r1) {
+    const e2 = 2 * err;
+    if (e2 > -dr) { err -= dr; c += sc; }
+    if (e2 < dc) { err += dc; r += sr; }
+    if (c === c1 && r === r1) break;
+    if (losBlock(cell(c, r))) return false;
   }
   return true;
 }
@@ -1455,8 +1609,9 @@ function updateEnemy(e, dt) {
   }
   const dx = player.x - e.x, dz = player.z - e.z;
   const dist = Math.hypot(dx, dz) || 0.001;
-  const los = dist < 24 && hasLOS(e);
-  if (los) e.state = dist < 9 ? "shoot" : "chase";
+  if (invulnT > 0 || timeAlive < 2.6) return;
+  const los = dist < 22 && hasLOS(e);
+  if (los) e.state = dist < 8 ? "shoot" : "chase";
   else if (e.state !== "idle") e.state = "chase";
   const sp = (e.tough ? 4.4 : 3.6) * dt;
   function walk(wx, wz) {
@@ -1488,7 +1643,7 @@ function buildLevel() {
   const mBlock = mat(blockTex, 0xf0d0a0, 0x2a1a08);
   const mDark = mat(darkTex, 0x887058);
   const mFloor = mat(floorTex, 0xe0c090, 0x2a1c10);
-  const mDirt = new THREE.MeshLambertMaterial({ map: dirtTex, color: 0xffffff, emissive: 0x6a4820, flatShading: true });
+  const mDirt = new THREE.MeshLambertMaterial({ map: dirtTex, color: 0xffe8c4, emissive: 0x9a6830, flatShading: true });
   const mMetal = mat(metalTex, 0x889090);
   const mBanner = mat(bannerTex);
   const mCeil = new THREE.MeshLambertMaterial({ color: 0x1a120c, flatShading: true });
@@ -1680,10 +1835,10 @@ function lockPointer() {
 function setKey(e, down) {
   held[e.code] = down;
   const k = (e.key || "").toLowerCase();
-  if (k === "w") held.KeyW = down;
-  if (k === "a") held.KeyA = down;
-  if (k === "s") held.KeyS = down;
-  if (k === "d") held.KeyD = down;
+  if (k === "w" || e.code === "ArrowUp") held.KeyW = down;
+  if (k === "a" || e.code === "ArrowLeft") held.KeyA = down;
+  if (k === "s" || e.code === "ArrowDown") held.KeyS = down;
+  if (k === "d" || e.code === "ArrowRight") held.KeyD = down;
   if (k === "e") held.KeyE = down;
   if (k === "r") held.KeyR = down;
   if (k === "m") held.KeyM = down;
@@ -1711,6 +1866,7 @@ function startGame() {
   }
   for (const e of enemies) {
     e.dead = false; e.hp = e.max; e.group.visible = true; e.state = "idle";
+    e.nextShot = 2.8 + Math.random();
     e.head.material.emissive.setHex(0x000000);
   }
   for (const p of pickups) { p.taken = false; p.mesh.visible = true; }
@@ -1737,6 +1893,7 @@ function startGame() {
     renderer.domElement.tabIndex = 0;
     renderer.domElement.focus();
   }
+  startAmbience();
   lockPointer();
   showMsg("THE HUNT BEGINS", 1500);
 }
@@ -1744,6 +1901,7 @@ function startGame() {
 function bind() {
   const onStartClick = (e) => {
     if (e && e.button != null && e.button !== 0) return;
+    if (optionsOpen) return;
     if (!started) {
       startGame();
       return;
@@ -1755,18 +1913,44 @@ function bind() {
   document.addEventListener("pointerlockchange", () => { pointerLocked = isLocked(); });
   document.addEventListener("mozpointerlockchange", () => { pointerLocked = isLocked(); });
   window.addEventListener("mousemove", (e) => {
-    if (!started || !player) return;
+    if (optionsOpen && slideDrag) {
+      sensFromUiX(uiPos(e).x);
+      return;
+    }
+    if (!started || !player || optionsOpen) return;
     if (!isLocked() && !pointerLocked) return;
-    player.yaw -= e.movementX * 0.00215;
-    player.pitch -= e.movementY * 0.00215;
+    player.yaw -= e.movementX * 0.00215 * lookSens;
+    player.pitch -= e.movementY * 0.00215 * lookSens;
     player.pitch = Math.max(-1.2, Math.min(1.2, player.pitch));
   }, true);
+  ui.addEventListener("pointerdown", (e) => {
+    if (!optionsOpen) return;
+    const p = uiPos(e);
+    if (optionsSliderAt(p.x, p.y)) {
+      slideDrag = true;
+      sensFromUiX(p.x);
+      e.preventDefault();
+    }
+  });
+  window.addEventListener("pointerup", () => { slideDrag = false; }, true);
   window.addEventListener("keydown", (e) => {
     setKey(e, true);
     if (e.code === "KeyM" && !started) {
       musicMuted = !musicMuted;
       if (musicMuted) window.pauseTitleMusic();
       else window.playTitleMusic();
+    }
+    if (e.code === "Escape") {
+      e.preventDefault();
+      if (optionsOpen) closeOptions();
+      else if (started) openOptions();
+      return;
+    }
+    if (optionsOpen) {
+      if (e.code === "ArrowLeft" || e.code === "KeyA") setSens(lookSens - 0.1);
+      if (e.code === "ArrowRight" || e.code === "KeyD") setSens(lookSens + 0.1);
+      e.preventDefault();
+      return;
     }
     if (!started) return;
     if (e.code === "KeyE" || e.key === "e" || e.key === "E") use();
@@ -1776,12 +1960,11 @@ function bind() {
     if ((e.code === "Digit3" || e.key === "3") && have[2]) { wepI = 2; swapGun(); }
     if ((e.code === "Digit4" || e.key === "4") && have[3]) { wepI = 3; swapGun(); }
     if ((e.code === "Digit5" || e.key === "5") && have[4]) { wepI = 4; swapGun(); }
-    if (e.code === "Escape") document.exitPointerLock();
     if (/^(Space|Arrow|KeyW|KeyA|KeyS|KeyD|Shift)/.test(e.code) || e.key === " ") e.preventDefault();
   }, true);
   window.addEventListener("keyup", (e) => { setKey(e, false); }, true);
   window.addEventListener("mousedown", (e) => {
-    if (!started) return;
+    if (!started || optionsOpen) return;
     if (e.button !== 0) return;
     if (!isLocked()) { lockPointer(); }
     mouseDown = true;
@@ -1789,7 +1972,7 @@ function bind() {
   }, true);
   window.addEventListener("mouseup", () => { mouseDown = false; }, true);
   window.addEventListener("wheel", (e) => {
-    if (!started) return;
+    if (!started || optionsOpen) return;
     const dir = e.deltaY > 0 ? 1 : -1;
     for (let i = 0; i < 5; i++) {
       wepI = (wepI + dir + 5) % 5;
@@ -1804,7 +1987,16 @@ function tick(dt) {
   if (lightning > 0) lightning -= dt * 3;
   else if (Math.random() < dt * 0.15) lightning = 1;
   if (!started || !player) return;
+  if (optionsOpen) return;
   timeAlive += dt;
+  if (invulnT > 0) invulnT -= dt;
+  if (ac && started) {
+    amb.dripT -= dt;
+    if (amb.dripT <= 0) {
+      amb.dripT = 1.2 + Math.random() * 2.4;
+      SFX.drip();
+    }
+  }
   if (msgT > 0) msgT -= dt;
   if (dmgT > 0) dmgT -= dt;
   if (faceHurt > 0) faceHurt -= dt;
@@ -1812,10 +2004,10 @@ function tick(dt) {
 
   const k = held;
   let ix = 0, iz = 0;
-  if (k.KeyW) iz -= 1;
-  if (k.KeyS) iz += 1;
-  if (k.KeyA) ix -= 1;
-  if (k.KeyD) ix += 1;
+  if (k.KeyW || k.ArrowUp) iz -= 1;
+  if (k.KeyS || k.ArrowDown) iz += 1;
+  if (k.KeyA || k.ArrowLeft) ix -= 1;
+  if (k.KeyD || k.ArrowRight) ix += 1;
   const running = k.ShiftLeft || k.ShiftRight;
   const sp = running ? RUN : MOVE;
   const len = Math.hypot(ix, iz) || 1;
@@ -1959,6 +2151,7 @@ function drawUI() {
   else if (screen === "dead") paintEnd(ug, "YOU DIED", "CLICK TO RISE AGAIN");
   else if (screen === "win") paintEnd(ug, "LEVEL COMPLETE", "THE HUNT CONTINUES");
   else if (screen === "secret") paintEnd(ug, "SECRET EXIT", "DELUXE PATH");
+  else if (screen === "options") { paintHUD(ug); paintOptions(ug); }
   else paintHUD(ug);
 }
 
@@ -2030,6 +2223,7 @@ function main() {
   setupTitleMusic();
   addEventListener("resize", () => {});
   loop();
+  if (location.search.indexOf("autostart") >= 0) startGame();
 }
 
 window.addEventListener("load", () => {
