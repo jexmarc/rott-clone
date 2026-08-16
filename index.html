@@ -58,7 +58,7 @@ const MAP = [
   "#~~~~~~~S~^~~1~~~~~~~~~~~~~~~~~~~~##",
   "#~~~~~~~~~~~~H~~~~~~~~~~t~~R~~M~~~##",
   "#~~~~~~~~~~G~~~~~~~~Z~~U~~~~~B~~~~##",
-  "#~~~~~~~~~~~~~~~~~~~~~T~~~~~~PQY.*##",
+  "#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~##",
   "###########g########################",
   "#............1.R.U.^..............##",
   "#.........^^....1.................##",
@@ -211,6 +211,7 @@ let openYaw = Math.PI / 2;
 let openPitch = 0.18;
 let openFwdX = 1;
 let openFwdZ = 0;
+let lastSafe = { x: 0, y: 0, z: 0 };
 let invulnT = 0;
 let lookSens = 1;
 let amb = { nodes: [], dripT: 0, crackleT: 0.2, master: null };
@@ -1017,7 +1018,7 @@ function paintTitle(g, t) {
   for (let i = 0; i < 10; i++) g.fillRect(56 + i * 4, 54, 3, 5);
   for (let i = 0; i < 9; i++) g.fillRect(220 + i * 4, 48, 3, 5);
   for (let i = 0; i < 20; i++) g.fillRect(80 + i * 8, 74, 6, 5);
-  function win(x, y, lit) {
+  function drawPane(x, y, lit) {
     g.fillStyle = "#140c08";
     g.fillRect(x - 1, y - 1, 10, 14);
     const flick = lit ? (0.65 + Math.sin(t * 9 + x) * 0.35) : 0;
@@ -1027,16 +1028,16 @@ function paintTitle(g, t) {
     g.fillRect(x + 3, y, 2, 12);
     g.fillRect(x, y + 5, 8, 2);
   }
-  win(70, 78, true);
-  win(70, 108, false);
-  win(238, 72, true);
-  win(238, 104, false);
-  win(100, 92, true);
-  win(132, 92, false);
-  win(164, 92, true);
-  win(196, 92, false);
-  win(116, 118, false);
-  win(180, 118, true);
+  drawPane(70, 78, true);
+  drawPane(70, 108, false);
+  drawPane(238, 72, true);
+  drawPane(238, 104, false);
+  drawPane(100, 92, true);
+  drawPane(132, 92, false);
+  drawPane(164, 92, true);
+  drawPane(196, 92, false);
+  drawPane(116, 118, false);
+  drawPane(180, 118, true);
   g.fillStyle = "#120a06";
   g.fillRect(146, 128, 28, 28);
   g.fillStyle = "#2a160c";
@@ -2300,7 +2301,14 @@ function hurtPlayer(n, fromX, fromZ) {
   if (player.hp <= 0) die();
 }
 
+function playerRow() {
+  if (!player) return 0;
+  return Math.round(player.z / TILE + 2);
+}
+
 function die() {
+  if (!started || !player) return;
+  if (inCourtyard(player.x, player.z) && timeAlive < 8) return;
   pointerLocked = false;
   optionsOpen = false;
   slideDrag = false;
@@ -2309,11 +2317,13 @@ function die() {
   started = false;
   screen = "dead";
   ui.style.pointerEvents = "none";
-  ui.classList.remove("play");
   if (window.playTitleMusic) window.playTitleMusic();
 }
 
 function win(secret) {
+  if (!started || !player) return;
+  if (inCourtyard(player.x, player.z)) return;
+  if (playerRow() < 12) return;
   pointerLocked = false;
   optionsOpen = false;
   slideDrag = false;
@@ -2322,7 +2332,6 @@ function win(secret) {
   started = false;
   screen = secret ? "secret" : "win";
   ui.style.pointerEvents = "none";
-  ui.classList.remove("play");
   if (window.playTitleMusic) window.playTitleMusic();
 }
 
@@ -2386,7 +2395,9 @@ function takePickup(p) {
   if (p.kind === "drunk") { have[4] = true; reserve[4] += 5; if (mag[4] === 0) mag[4] = 4; wepI = 4; swapGun(); }
   if (p.kind === "health") player.hp = Math.min(100, player.hp + 40);
   if (p.kind === "ammo") reserve[wepI] += weps[wepI].rocket ? 3 : 24;
-  if (p.kind === "secret") win(true);
+  if (p.kind === "secret") {
+    if (!inCourtyard(player.x, player.z) && playerRow() >= 12) win(true);
+  }
 }
 
 function findCell(ch) {
@@ -2425,6 +2436,9 @@ function resetPlayer() {
   invulnT = 3.2;
   hitCueT = 0;
   hitMarkT = 0;
+  lastSafe.x = px;
+  lastSafe.y = 0;
+  lastSafe.z = pz;
   if (gunRoot) swapGun();
 }
 
@@ -3392,6 +3406,20 @@ function tick(dt) {
   wasOnGround = player.onGround;
   player.onGround = false;
   tryMove(wishX * sp * dt, player.vy * dt, wishZ * sp * dt);
+  const pr = playerRow();
+  const pc = Math.round(player.x / TILE + W / 2);
+  if (player.y < -1.2 || pr < 1 || pr >= H - 1 || pc < 1 || pc >= W - 1) {
+    player.x = lastSafe.x;
+    player.y = lastSafe.y;
+    player.z = lastSafe.z;
+    player.vy = 0;
+    player.onGround = true;
+    padAir = 0;
+  } else if (player.onGround && player.y >= -0.05 && !overlaps(player.x, player.y, player.z)) {
+    lastSafe.x = player.x;
+    lastSafe.y = player.y;
+    lastSafe.z = player.z;
+  }
   if (player.onGround && !wasOnGround && player.vy < -6) {
     landDip = 0.18;
     SFX.step(floorKind(), true);
@@ -3415,7 +3443,8 @@ function tick(dt) {
     if (p.taken) continue;
     p.mesh.rotation.y += dt * 2.5;
     p.mesh.position.y = p.y + Math.sin(titleT * 4 + p.x) * 0.08;
-    if (Math.hypot(player.x - p.x, player.z - p.z) < 1.1 && Math.abs(player.y - p.y) < 1.7) takePickup(p);
+    const grab = p.kind === "gold" ? 1.65 : 1.1;
+    if (Math.hypot(player.x - p.x, player.z - p.z) < grab && Math.abs(player.y - p.y) < 1.7) takePickup(p);
   }
 
   for (const d of doors) {
@@ -3452,7 +3481,7 @@ function tick(dt) {
     showMsg("TIMED DOOR SHUT");
   }
 
-  if (exitTrig && Math.hypot(player.x - exitTrig.x, player.z - exitTrig.z) < 1.5) win(false);
+  if (exitTrig && playerRow() >= 36 && Math.hypot(player.x - exitTrig.x, player.z - exitTrig.z) < 1.5) win(false);
 
   if (reloading > 0) {
     reloading -= dt;
