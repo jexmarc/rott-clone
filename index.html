@@ -945,7 +945,7 @@ function startAmbience() {
   try { if (ac.state === "suspended") ac.resume(); } catch (err) {}
   try {
     const master = ac.createGain();
-    master.gain.value = 1.45;
+    master.gain.value = 0.9;
     master.connect(ac.destination);
     amb.master = master;
 
@@ -964,14 +964,14 @@ function startAmbience() {
 
     const brown = loopNoiseBuf(5.2, "brown");
     const pink = loopNoiseBuf(4.4, "pink");
-    amb.windG = layer(brown, "lowpass", 220, 0.7, 0.42);
+    amb.windG = layer(brown, "lowpass", 220, 0.7, 0.2);
     amb.airG = layer(pink, "bandpass", 980, 0.7, 0.22);
     amb.torchG = layer(pink, "bandpass", 1600, 1.2, 0.12);
     amb.clothG = layer(pink, "bandpass", 420, 0.85, 0.1);
     amb.rushG = layer(pink, "highpass", 900, 0.7, 0.001);
 
     const droneG = ac.createGain();
-    droneG.gain.value = 0.1;
+    droneG.gain.value = 0.02;
     droneG.connect(master);
     amb.droneG = droneG;
     const d1 = ac.createOscillator();
@@ -984,7 +984,7 @@ function startAmbience() {
     d3.type = "triangle";
     d3.frequency.value = 86;
     const d3g = ac.createGain();
-    d3g.gain.value = 0.35;
+    d3g.gain.value = 0;
     d1.connect(droneG);
     d2.connect(droneG);
     d3.connect(d3g); d3g.connect(droneG);
@@ -1021,12 +1021,12 @@ function updateAmbience(dt, moving, running, airborne) {
   if (!amb.master) return;
   const t = ac.currentTime;
   const yard = !!(player && inCourtyard(player.x, player.z));
-  if (amb.windG) amb.windG.gain.setTargetAtTime(yard ? 0.55 : 0.28, t, 0.3);
+  if (amb.windG) amb.windG.gain.setTargetAtTime(yard ? 0.25 : 0.14, t, 0.3);
   if (amb.airG) amb.airG.gain.setTargetAtTime(yard ? 0.32 : 0.2, t, 0.3);
   if (amb.torchG) amb.torchG.gain.setTargetAtTime((yard ? 0.12 : 0.2) * (0.7 + Math.random() * 0.5), t, 0.07);
   if (amb.clothG) amb.clothG.gain.setTargetAtTime(airborne ? 0.12 : (moving ? (running ? 0.28 : 0.2) : 0.08), t, 0.1);
   if (amb.rushG) amb.rushG.gain.setTargetAtTime(airborne ? 0.32 : 0.001, t, 0.08);
-  if (amb.droneG) amb.droneG.gain.setTargetAtTime(yard ? 0.09 : 0.12, t, 0.4);
+  if (amb.droneG) amb.droneG.gain.setTargetAtTime(yard ? 0.015 : 0.02, t, 0.4);
   amb.dripT -= dt;
   if (amb.dripT <= 0) {
     amb.dripT = yard ? 1.4 + Math.random() * 1.8 : 0.7 + Math.random() * 1.2;
@@ -3652,7 +3652,7 @@ function bind() {
     if (!started || !player || optionsOpen) return;
     if (!pointerLocked && !isLocked()) return;
     player.yaw += e.movementX * 0.00215 * lookSens;
-    player.pitch += e.movementY * 0.00215 * lookSens;
+    player.pitch -= e.movementY * 0.00215 * lookSens;
     player.pitch = Math.max(-1.2, Math.min(1.2, player.pitch));
   }, true);
   ui.addEventListener("pointerdown", (e) => {
