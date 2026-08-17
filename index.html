@@ -1653,58 +1653,74 @@ function spawnEnemy(x, y, z, tough) {
   const s = findCell("S");
   if (Math.hypot(x - worldX(s.c), z - worldZ(s.r)) < TILE * 3.2) return;
   const g = new THREE.Group();
-  const vest = tough ? 0x3a3c34 : 0x5a7840;
-  const pants = tough ? 0x242820 : 0x3a4c32;
-  const skin = 0xf0c090;
-  const helm = tough ? 0x2a2c28 : 0x3a4a3c;
+  const vest = tough ? 0x242820 : 0x2e3226;
+  const pants = tough ? 0x4a3c24 : 0x8a6e3c;
+  const skin = 0xe8b878;
+  const helm = tough ? 0x3a3e42 : 0x5c626a;
   const boot = 0x1a1410;
-  const body = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.54, 0.3), colMat(vest));
-  body.position.y = 1.22;
-  const pelvis = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.2, 0.28), colMat(pants));
-  pelvis.position.y = 0.86;
-  const belt = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.08, 0.3), colMat(0x2a2014));
-  belt.position.y = 0.98;
-  const head = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.28, 0.24), colMat(skin));
-  head.position.set(0, 1.68, 0.02);
-  const helmet = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.14, 0.3), colMat(helm));
-  helmet.position.set(0, 1.86, 0);
-  const brim = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.04, 0.12), colMat(helm));
-  brim.position.set(0, 1.78, 0.16);
-  const eyeL = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.04, 0.04), colMat(0x101008));
-  const eyeR = eyeL.clone();
-  eyeL.position.set(-0.06, 1.7, 0.14);
-  eyeR.position.set(0.06, 1.7, 0.14);
-  const strap = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.5, 0.32), colMat(0x3a2818));
-  strap.position.set(-0.16, 1.22, 0);
-  const armL = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.34, 0.14), colMat(vest));
-  const armR = armL.clone();
-  armL.position.set(-0.36, 1.2, 0);
-  armR.position.set(0.36, 1.16, 0.06);
-  const handL = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), colMat(skin));
-  const handR = handL.clone();
-  handL.position.set(-0.36, 0.98, 0.04);
-  handR.position.set(0.38, 0.84, 0.2);
-  const gun = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 0.46), colMat(0x2a2a20));
-  gun.position.set(0.38, 0.86, 0.42);
-  const mag = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.18, 0.07), colMat(0x1a1a14));
-  mag.position.set(0.38, 0.74, 0.28);
-  const bootL = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.12, 0.26), colMat(boot));
+  const bootL = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.14, 0.28), colMat(boot));
   const bootR = bootL.clone();
-  bootL.position.set(-0.12, 0.06, 0.04);
-  bootR.position.set(0.12, 0.06, 0.04);
-  const legL = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.7, 0.18), colMat(pants));
+  bootL.position.set(-0.13, 0.07, 0.04);
+  bootR.position.set(0.13, 0.07, 0.04);
+  const legL = new THREE.Mesh(new THREE.BoxGeometry(0.17, 0.62, 0.2), colMat(pants));
   const legR = legL.clone();
-  legL.position.set(-0.12, 0.44, 0);
-  legR.position.set(0.12, 0.44, 0);
+  legL.position.set(-0.13, 0.46, 0);
+  legR.position.set(0.13, 0.46, 0);
+  const pelvis = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.2, 0.3), colMat(pants));
+  pelvis.position.y = 0.84;
+  const belt = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.09, 0.32), colMat(0x2a2014));
+  belt.position.y = 0.96;
+  const body = new THREE.Mesh(new THREE.BoxGeometry(0.54, 0.52, 0.34), colMat(vest));
+  body.position.y = 1.24;
+  const collar = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.1, 0.28), colMat(0x3a3c30));
+  collar.position.y = 1.52;
+  const pouchL = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.16, 0.12), colMat(0x3a2e18));
+  const pouchR = pouchL.clone();
+  pouchL.position.set(-0.14, 1.14, 0.2);
+  pouchR.position.set(0.14, 1.14, 0.2);
+  const strap = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.5, 0.36), colMat(0x4a3820));
+  strap.position.set(-0.18, 1.24, 0);
+  const head = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.14, 0.16), colMat(skin));
+  head.position.set(0, 1.64, 0.1);
+  const helmet = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.3, 0.46), colMat(helm));
+  helmet.position.set(0, 1.86, 0.02);
+  const brim = new THREE.Mesh(new THREE.BoxGeometry(0.54, 0.06, 0.2), colMat(helm));
+  brim.position.set(0, 1.72, 0.24);
+  const visor = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.05, 0.08), colMat(0x101208));
+  visor.position.set(0, 1.7, 0.22);
+  const neck = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.12, 0.16), colMat(helm));
+  neck.position.set(0, 1.7, -0.14);
+  const armL = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.42, 0.15), colMat(vest));
+  const armR = armL.clone();
+  armL.position.set(-0.38, 1.18, 0.08);
+  armR.position.set(0.38, 1.14, 0.1);
+  const handL = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.11, 0.11), colMat(skin));
+  const handR = handL.clone();
+  handL.position.set(-0.22, 1.02, 0.26);
+  handR.position.set(0.28, 1.0, 0.26);
+  const gun = new THREE.Mesh(new THREE.BoxGeometry(0.78, 0.1, 0.12), colMat(0x2a2a22));
+  gun.position.set(0.04, 1.04, 0.3);
+  gun.rotation.z = 0.18;
+  const barrel = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.055, 0.055), colMat(0x3a3a32));
+  barrel.position.set(-0.48, 1.1, 0.3);
+  barrel.rotation.z = 0.18;
+  const mag = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.28, 0.09), colMat(0x1a1a14));
+  mag.position.set(-0.02, 0.86, 0.3);
+  const stock = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.14, 0.1), colMat(0x3a2a14));
+  stock.position.set(0.46, 0.98, 0.26);
+  stock.rotation.z = 0.18;
   const hit = new THREE.Mesh(
     new THREE.BoxGeometry(0.95, 1.9, 0.62),
     new THREE.MeshBasicMaterial({ visible: false })
   );
   hit.name = "hit";
   hit.position.y = 0.95;
-  g.add(body, pelvis, belt, head, helmet, brim, eyeL, eyeR, strap, armL, armR, handL, handR, gun, mag, bootL, bootR, legL, legR, hit);
+  g.add(
+    body, pelvis, belt, collar, pouchL, pouchR, strap, head, helmet, brim, visor, neck,
+    armL, armR, handL, handR, gun, barrel, mag, stock, bootL, bootR, legL, legR, hit
+  );
   g.position.set(x, y, z);
-  g.scale.set(1.12, 1.12, 1.12);
+  g.scale.set(1.18, 1.18, 1.18);
   scene.add(g);
   enemies.push({
     group: g, body, head, x, y, z, vx: 0, vz: 0,
@@ -1718,17 +1734,15 @@ function markOpener(e) {
   if (!e) return;
   e.opener = true;
   e.hp = e.max = 70;
-  e.body.material = new THREE.MeshBasicMaterial({ color: 0xd8b060 });
-  e.head.material = new THREE.MeshBasicMaterial({ color: 0xf0d0a0 });
-  const sash = new THREE.Mesh(
-    new THREE.BoxGeometry(0.62, 0.24, 0.4),
-    new THREE.MeshBasicMaterial({ color: 0xff2010 })
-  );
-  sash.position.y = 1.08;
-  e.group.add(sash);
-  e.group.scale.set(1.55, 1.55, 1.55);
+  const armband = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.1, 0.18), colMat(0xff2010));
+  armband.position.set(-0.38, 1.28, 0.08);
+  e.group.add(armband);
+  const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.05, 0.48), colMat(0xc01810));
+  stripe.position.set(0, 1.98, 0.02);
+  e.group.add(stripe);
+  e.group.scale.set(1.36, 1.36, 1.36);
   const fat = e.group.getObjectByName("hit");
-  if (fat) fat.scale.set(1.8, 1.35, 1.8);
+  if (fat) fat.scale.set(1.35, 1.2, 1.35);
 }
 
 function spawnBarrel(x, z) {
@@ -1739,104 +1753,52 @@ function spawnBarrel(x, z) {
 function tossGib(mesh, x, y, z, vx, vy, vz, life) {
   mesh.position.set(x, y, z);
   scene.add(mesh);
-  gibs.push({ mesh, vx, vy, vz, life });
+  gibs.push({ mesh, vx, vy, vz, life, grounded: false });
+}
+
+function sitLimb(w, h, d, color, x, z, ox, oz) {
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), new THREE.MeshBasicMaterial({ color }));
+  m.position.set(x + ox, 0.07 + h * 0.5, z + oz);
+  m.rotation.set((Math.random() - 0.5) * 0.35, Math.random() * 6.28, (Math.random() - 0.5) * 0.45);
+  scene.add(m);
+  gibs.push({ mesh: m, vx: 0, vy: 0, vz: 0, life: 18, grounded: true });
+}
+
+function spawnFloorLimbs(x, z, scale) {
+  const s = scale || 1;
+  sitLimb(0.52 * s, 0.22 * s, 0.46 * s, 0x5c626a, x, z, -0.2, 0.7);
+  sitLimb(0.24 * s, 0.16 * s, 0.18 * s, 0xe8b878, x, z, 0.55, 0.25);
+  sitLimb(0.58 * s, 0.34 * s, 0.36 * s, 0x2e3226, x, z, 0.05, -0.1);
+  sitLimb(0.16 * s, 0.52 * s, 0.16 * s, 0x2e3226, x, z, -0.85, 0.15);
+  sitLimb(0.16 * s, 0.52 * s, 0.16 * s, 0x2e3226, x, z, 0.9, -0.2);
+  sitLimb(0.18 * s, 0.64 * s, 0.2 * s, 0x8a6e3c, x, z, -0.4, -0.75);
+  sitLimb(0.18 * s, 0.64 * s, 0.2 * s, 0x8a6e3c, x, z, 0.45, 0.85);
+  sitLimb(0.2 * s, 0.14 * s, 0.32 * s, 0x1a1410, x, z, -0.95, -0.4);
+  sitLimb(0.2 * s, 0.14 * s, 0.32 * s, 0x1a1410, x, z, 1.0, 0.45);
+  sitLimb(0.95 * s, 0.12 * s, 0.12 * s, 0x2a2a22, x, z, 0.15, -0.95);
+  sitLimb(0.09 * s, 0.3 * s, 0.1 * s, 0x1a1a14, x, z, 0.35, -0.7);
 }
 
 function spawnGibs(x, y, z, n, color) {
   SFX.gib();
-  const parts = [
-    [new THREE.BoxGeometry(0.32, 0.16, 0.3), 0x3a4a3c],
-    [new THREE.BoxGeometry(0.26, 0.28, 0.24), 0xf0c090],
-    [new THREE.BoxGeometry(0.48, 0.4, 0.28), 0x5a7840],
-    [new THREE.BoxGeometry(0.14, 0.36, 0.14), 0x5a7840],
-    [new THREE.BoxGeometry(0.14, 0.36, 0.14), 0x5a7840],
-    [new THREE.BoxGeometry(0.16, 0.42, 0.18), 0x3a4c32],
-    [new THREE.BoxGeometry(0.16, 0.42, 0.18), 0x3a4c32],
-    [new THREE.BoxGeometry(0.16, 0.12, 0.26), 0x1a1410],
-    [new THREE.BoxGeometry(0.16, 0.12, 0.26), 0x1a1410],
-    [new THREE.BoxGeometry(0.08, 0.08, 0.4), 0x2a2a20]
-  ];
-  for (let i = 0; i < parts.length; i++) {
-    const m = new THREE.Mesh(parts[i][0], new THREE.MeshBasicMaterial({ color: color || parts[i][1] }));
-    tossGib(
-      m,
-      x + (Math.random() - 0.5) * 0.5,
-      y + 0.3 + Math.random() * 1.1,
-      z + (Math.random() - 0.5) * 0.5,
-      (Math.random() - 0.5) * 8,
-      4 + Math.random() * 7,
-      (Math.random() - 0.5) * 8,
-      3.6 + Math.random()
-    );
-  }
-  const extra = Math.max(8, (n || 16) - parts.length);
+  spawnFloorLimbs(x, z, 1);
+  const extra = Math.min(5, Math.max(2, (n || 12) - 10));
   for (let i = 0; i < extra; i++) {
-    const s = 0.22 + Math.random() * 0.55;
-    const m = new THREE.Mesh(
-      new THREE.BoxGeometry(s, s * (0.45 + Math.random() * 0.7), s),
-      new THREE.MeshBasicMaterial({ color: color || (Math.random() > 0.28 ? 0xd01810 : 0xe8b070) })
-    );
-    tossGib(
-      m,
-      x + (Math.random() - 0.5) * 0.8,
-      y + Math.random() * 1.2,
-      z + (Math.random() - 0.5) * 0.8,
-      (Math.random() - 0.5) * 12,
-      5 + Math.random() * 9,
-      (Math.random() - 0.5) * 12,
-      3.2 + Math.random()
-    );
+    const s = 0.18 + Math.random() * 0.22;
+    sitLimb(s, s * 0.55, s, color || (Math.random() > 0.35 ? 0xc81810 : 0xe8b070), x, z, (Math.random() - 0.5) * 1.6, (Math.random() - 0.5) * 1.6);
   }
-  for (let i = 0; i < 18; i++) {
-    const p = new THREE.Mesh(new THREE.SphereGeometry(0.09, 5, 5), new THREE.MeshBasicMaterial({ color: 0x8a0000 }));
-    tossGib(p, x, y + 1, z, (Math.random() - 0.5) * 9, 3 + Math.random() * 6, (Math.random() - 0.5) * 9, 1.6);
-    gibs[gibs.length - 1].decal = true;
+  for (let i = 0; i < 10; i++) {
+    addDecal(x + (Math.random() - 0.5) * 1.6, 0, z + (Math.random() - 0.5) * 1.6, null, 1.2 + Math.random());
   }
 }
 
 function spawnOpenerGibs(x, y, z) {
   SFX.gib();
-  const cols = [0xff2010, 0xc01008, 0xff4030, 0xf2c070, 0xe8a028, 0xfff0c8, 0x8a0000, 0xd84820];
-  for (let i = 0; i < 34; i++) {
-    const s = 0.55 + Math.random() * 0.95;
-    const m = new THREE.Mesh(
-      new THREE.BoxGeometry(s, s * (0.45 + Math.random() * 0.7), s * (0.55 + Math.random() * 0.4)),
-      new THREE.MeshBasicMaterial({ color: cols[i % cols.length] })
-    );
-    m.position.set(x + (Math.random() - 0.5) * 1.1, y + 0.2 + Math.random() * 1.3, z + (Math.random() - 0.5) * 1.1);
-    scene.add(m);
-    gibs.push({
-      mesh: m,
-      vx: (Math.random() - 0.5) * 5.2,
-      vy: 3.4 + Math.random() * 5.8,
-      vz: (Math.random() - 0.5) * 5.2,
-      life: 2.8 + Math.random() * 1.3
-    });
-  }
-  for (let i = 0; i < 12; i++) {
-    const s = 0.7 + Math.random() * 0.7;
-    const m = new THREE.Mesh(
-      new THREE.BoxGeometry(s, s * 0.55, s),
-      new THREE.MeshBasicMaterial({ color: cols[i % cols.length] })
-    );
-    m.position.set(x + (Math.random() - 0.5) * 0.9, 0.28 + Math.random() * 0.35, z + (Math.random() - 0.5) * 0.9);
-    scene.add(m);
-    gibs.push({
-      mesh: m,
-      vx: (Math.random() - 0.5) * 1.4,
-      vy: 1.2 + Math.random() * 2.2,
-      vz: (Math.random() - 0.5) * 1.4,
-      life: 3.4
-    });
-  }
+  spawnFloorLimbs(x, z, 1.55);
+  sitLimb(0.2, 0.12, 0.2, 0xff2010, x, z, -0.55, 0.95);
+  sitLimb(0.28, 0.16, 0.22, 0xe8b878, x, z, 0.8, -0.15);
   for (let i = 0; i < 8; i++) {
-    addDecal(
-      x + (Math.random() - 0.5) * 1.8,
-      0,
-      z + (Math.random() - 0.5) * 1.8,
-      null,
-      2.1 + Math.random() * 1.6
-    );
+    addDecal(x + (Math.random() - 0.5) * 2.0, 0, z + (Math.random() - 0.5) * 2.0, null, 2.0 + Math.random() * 1.4);
   }
 }
 
@@ -2334,7 +2296,6 @@ function hurtEnemy(e, dmg, part, hit) {
     killEnemy(e, part === "head" || dmg > 50);
     return;
   }
-  spawnGibs(e.x, 1.1, e.z, e.opener ? 14 : (part === "head" ? 18 : 10));
   addDecal(e.x, e.y + 0.02, e.z, null, e.opener ? 2.2 : 1);
   const wall = nearestWallHit(e.x, 1.2, e.z);
   if (wall) addDecal(e.x, 1.2, e.z, wall, e.opener ? 1.8 : 1);
@@ -2345,8 +2306,11 @@ function killEnemy(e, gibby) {
   e.dead = true;
   e.state = "dead";
   SFX.death();
-  if (e.opener) spawnOpenerGibs(e.x, 1.2, e.z);
-  else spawnGibs(e.x, 1.2, e.z, gibby ? 42 : 24);
+  if (e.opener) {
+    spawnOpenerGibs(e.x, 1.2, e.z);
+    if (gunFlash) gunFlash.visible = false;
+    if (muzzle) { muzzle.intensity = 0; muzzle.visible = false; }
+  } else spawnGibs(e.x, 1.2, e.z, gibby ? 42 : 24);
   addDecal(e.x, e.y + 0.02, e.z, null, e.opener ? 3.2 : 1);
   const wall = nearestWallHit(e.x, 1.1, e.z);
   if (wall) addDecal(e.x, 1.1, e.z, wall, e.opener ? 2.4 : 1);
@@ -2990,7 +2954,7 @@ function updateEnemy(e, dt) {
     e.hurt -= dt;
     if (e.hurt <= 0) {
       if (e.head.material.emissive) e.head.material.emissive.setHex(0x000000);
-      else if (e.opener) e.head.material.color.setHex(0xf0d0a0);
+      else if (e.opener) e.head.material.color.setHex(0xe8b878);
     }
   }
   if (e.flinch > 0) e.flinch -= dt;
@@ -3841,16 +3805,22 @@ function tick(dt) {
 
   for (let i = gibs.length - 1; i >= 0; i--) {
     const g = gibs[i];
-    g.vy -= GRAV * dt;
-    g.mesh.position.x += g.vx * dt;
-    g.mesh.position.y += g.vy * dt;
-    g.mesh.position.z += g.vz * dt;
-    g.mesh.rotation.x += dt * 8;
-    g.mesh.rotation.z += dt * 6;
-    if (g.mesh.position.y < 0.05) {
-      g.mesh.position.y = 0.05; g.vy *= -0.22; g.vx *= 0.58; g.vz *= 0.58;
-      if (g.decal) { addDecal(g.mesh.position.x, 0, g.mesh.position.z); g.life = 0; }
-      if (g.nade) { explode(g.mesh.position.x, 0.3, g.mesh.position.z); g.life = 0; }
+    if (!g.grounded) {
+      g.vy -= GRAV * dt;
+      g.mesh.position.x += g.vx * dt;
+      g.mesh.position.y += g.vy * dt;
+      g.mesh.position.z += g.vz * dt;
+      g.mesh.rotation.x += dt * 4;
+      g.mesh.rotation.z += dt * 3;
+      if (g.mesh.position.y < 0.08) {
+        g.mesh.position.y = 0.08;
+        g.vx = 0;
+        g.vy = 0;
+        g.vz = 0;
+        g.grounded = true;
+        if (g.decal) { addDecal(g.mesh.position.x, 0, g.mesh.position.z); g.life = 0; }
+        if (g.nade) { explode(g.mesh.position.x, 0.3, g.mesh.position.z); g.life = 0; }
+      }
     }
     g.life -= dt;
     if (g.life <= 0) {
