@@ -1075,127 +1075,115 @@ function drawText3D(g, str, x, y, face, shade, scale) {
 
 function paintTitle(g, t) {
   const w = UW, h = UH;
-  for (let y = 0; y < 118; y++) {
-    const u = y / 118;
-    const n = (hash((y + (t * 8) | 0) & 63, y) * 10) | 0;
-    const r = (18 + u * 42 + n) | 0;
-    const gg = (10 + u * 16) | 0;
-    const b = (16 + u * 10 + (1 - u) * 8) | 0;
+  for (let y = 0; y < h; y++) {
+    const u = y / h;
+    const n = (hash(y, (t * 3) | 0) * 8) | 0;
+    let r, gg, b;
+    if (u < 0.62) {
+      r = 6 + n; gg = 8 + n; b = 22 + (u * 28) | 0;
+    } else if (u < 0.78) {
+      const hz = (u - 0.62) / 0.16;
+      r = (10 + hz * 90) | 0;
+      gg = (8 + hz * 28) | 0;
+      b = (36 - hz * 16) | 0;
+    } else {
+      r = 10 + n; gg = 8; b = 14;
+    }
     g.fillStyle = "rgb(" + r + "," + gg + "," + b + ")";
     g.fillRect(0, y, w, 1);
   }
-  for (let i = 0; i < 28; i++) {
-    const cx = ((hash(i, 2) * 360 + t * (4 + i * 0.3)) % 360) - 20;
-    const cy = 8 + hash(i, 4) * 50;
-    const cw = 30 + hash(i, 6) * 50;
-    const ch = 6 + hash(i, 8) * 10;
-    g.fillStyle = "rgba(40,28,28," + (0.18 + hash(i, 9) * 0.22) + ")";
-    g.fillRect(cx, cy, cw, ch);
+  for (let i = 0; i < 42; i++) {
+    const sx = (hash(i, 1) * w) | 0;
+    const sy = (hash(i, 3) * 110) | 0;
+    const tw = hash(i, 5) > 0.82 ? 2 : 1;
+    g.fillStyle = hash(i, 7) > 0.7 ? "#d0d8ff" : "#8890b0";
+    g.fillRect(sx, sy, tw, tw);
   }
+  g.fillStyle = "#e8d8a0";
+  g.fillRect(268, 18, 18, 18);
+  g.fillStyle = "#c8b070";
+  g.fillRect(270, 20, 8, 6);
+  g.fillRect(278, 26, 6, 6);
   if (lightning > 0) {
-    g.fillStyle = "rgba(200,190,160," + (lightning * 0.45) + ")";
-    g.fillRect(0, 0, w, 118);
-    g.strokeStyle = "#efe8c8";
-    g.lineWidth = 1;
-    g.beginPath();
-    let lx = 40 + (hash((t * 3) | 0, 1) * 240);
+    g.fillStyle = "rgba(210,200,170," + (lightning * 0.4) + ")";
+    g.fillRect(0, 0, w, 130);
+    g.fillStyle = "#efe8c8";
+    let lx = 50 + (hash((t * 3) | 0, 1) * 180);
     let ly = 0;
-    g.moveTo(lx, ly);
-    for (let k = 0; k < 6; k++) {
-      lx += (hash(k, (t * 20) | 0) - 0.5) * 28;
-      ly += 12 + hash(k, 3) * 10;
-      g.lineTo(lx, ly);
-    }
-    g.stroke();
-  }
-  g.fillStyle = "#1a1008";
-  g.fillRect(0, 150, w, 50);
-  for (let x = 0; x < w; x += 4) {
-    const hh = 4 + (hash(x, 11) * 10) | 0;
-    g.fillStyle = hash(x, 12) > 0.5 ? "#2a1a10" : "#22140c";
-    g.fillRect(x, 150 - hh, 4, hh + 4);
-  }
-
-  function brick(x, y, bw, bh, c) {
-    g.fillStyle = c;
-    g.fillRect(x, y, bw, bh);
-    g.fillStyle = "rgba(0,0,0,0.25)";
-    g.fillRect(x, y + bh - 1, bw, 1);
-    g.fillRect(x + bw - 1, y, 1, bh);
-  }
-  function masonryBlock(x, y, bw, bh) {
-    for (let yy = y; yy < y + bh; yy += 4) {
-      const shift = ((yy >> 2) & 1) ? 3 : 0;
-      for (let xx = x - shift; xx < x + bw; xx += 7) {
-        const n = hash(xx, yy);
-        const cr = (88 + n * 40) | 0;
-        brick(Math.max(x, xx), yy, Math.min(6, x + bw - xx), Math.min(3, y + bh - yy),
-          "rgb(" + cr + "," + ((cr * 0.62) | 0) + "," + ((cr * 0.36) | 0) + ")");
-      }
+    for (let k = 0; k < 7; k++) {
+      const nx = lx + (hash(k, (t * 20) | 0) - 0.5) * 26;
+      const ny = ly + 10 + hash(k, 3) * 12;
+      g.fillRect(lx | 0, ly | 0, 2, (ny - ly) | 0);
+      lx = nx; ly = ny;
     }
   }
-  masonryBlock(78, 78, 164, 78);
-  masonryBlock(58, 58, 42, 98);
-  masonryBlock(220, 52, 40, 104);
+  for (let x = 0; x < w; x += 6) {
+    const hh = 18 + (hash(x, 11) * 22) | 0;
+    const n = hash(x, 13);
+    g.fillStyle = n > 0.5 ? "#1a1410" : "#12100e";
+    g.fillRect(x, 168 - hh, 6, hh + 40);
+    if (n > 0.62) {
+      const flick = 0.45 + Math.sin(t * 8 + x) * 0.35;
+      g.fillStyle = "rgb(" + ((200 * flick) | 0) + "," + ((80 * flick) | 0) + ",16)";
+      g.fillRect(x + 1, 168 - hh + 6, 3, 5);
+    }
+  }
+  g.fillStyle = "#0a0808";
+  g.fillRect(0, 168, w, 32);
+  const sx0 = 38, sy0 = 78;
+  g.fillStyle = "#5c626a";
+  g.fillRect(sx0 + 10, sy0, 22, 10);
+  g.fillRect(sx0 + 8, sy0 + 8, 26, 3);
+  g.fillStyle = "#e8b878";
+  g.fillRect(sx0 + 14, sy0 + 10, 10, 5);
+  g.fillStyle = "#2e3226";
+  g.fillRect(sx0 + 8, sy0 + 16, 24, 18);
+  g.fillStyle = "#8a6e3c";
+  g.fillRect(sx0 + 10, sy0 + 34, 8, 22);
+  g.fillRect(sx0 + 22, sy0 + 34, 8, 22);
+  g.fillStyle = "#1a1410";
+  g.fillRect(sx0 + 10, sy0 + 54, 8, 5);
+  g.fillRect(sx0 + 22, sy0 + 54, 8, 5);
+  g.fillStyle = "#2a2a22";
+  g.fillRect(sx0 + 4, sy0 + 28, 36, 4);
+  g.fillStyle = "#1a1a14";
+  g.fillRect(sx0 + 18, sy0 + 32, 4, 8);
+  g.fillStyle = "#ff2010";
+  g.fillRect(sx0 + 6, sy0 + 20, 6, 4);
   g.fillStyle = "#3a2414";
-  for (let i = 0; i < 10; i++) g.fillRect(56 + i * 4, 54, 3, 5);
-  for (let i = 0; i < 9; i++) g.fillRect(220 + i * 4, 48, 3, 5);
-  for (let i = 0; i < 20; i++) g.fillRect(80 + i * 8, 74, 6, 5);
-  function drawPane(x, y, lit) {
-    g.fillStyle = "#140c08";
-    g.fillRect(x - 1, y - 1, 10, 14);
-    const flick = lit ? (0.65 + Math.sin(t * 9 + x) * 0.35) : 0;
-    g.fillStyle = lit ? "rgb(" + ((180 * flick) | 0) + "," + ((90 * flick) | 0) + ",20)" : "#1a100c";
-    g.fillRect(x, y, 8, 12);
-    g.fillStyle = "#2a1810";
-    g.fillRect(x + 3, y, 2, 12);
-    g.fillRect(x, y + 5, 8, 2);
+  g.fillRect(210, 96, 78, 72);
+  for (let yy = 96; yy < 168; yy += 5) {
+    const shift = ((yy >> 2) & 1) ? 3 : 0;
+    for (let xx = 210 - shift; xx < 288; xx += 8) {
+      const n = hash(xx, yy);
+      const cr = (70 + n * 28) | 0;
+      g.fillStyle = "rgb(" + cr + "," + ((cr * 0.55) | 0) + "," + ((cr * 0.32) | 0) + ")";
+      g.fillRect(Math.max(210, xx), yy, 7, 4);
+    }
   }
-  drawPane(70, 78, true);
-  drawPane(70, 108, false);
-  drawPane(238, 72, true);
-  drawPane(238, 104, false);
-  drawPane(100, 92, true);
-  drawPane(132, 92, false);
-  drawPane(164, 92, true);
-  drawPane(196, 92, false);
-  drawPane(116, 118, false);
-  drawPane(180, 118, true);
-  g.fillStyle = "#120a06";
-  g.fillRect(146, 128, 28, 28);
-  g.fillStyle = "#2a160c";
-  g.beginPath();
-  g.moveTo(146, 128);
-  g.lineTo(160, 116);
-  g.lineTo(174, 128);
-  g.fill();
-  const glow = 0.4 + Math.sin(t * 6) * 0.2;
-  g.fillStyle = "rgba(180,70,20," + glow + ")";
-  g.fillRect(154, 138, 12, 10);
-
-  drawText3D(g, "RISE OF THE TRIAD", 160, 10, "#f0c44a", "#6a3a08", 2);
-  drawText3D(g, "THE HUNT BEGINS", 160, 30, "#d02020", "#400808", 2);
-  drawText(g, "SHAREWARE E1A1 TRIBUTE", 160, 48, "#a88858", 1, "center");
-
-  function titleBtn(x, y, bw, bh, label, pulse) {
-    g.fillStyle = "#140a08";
-    g.fillRect(x, y, bw, bh);
-    g.fillStyle = "#6a4030";
-    g.fillRect(x, y, bw, 1);
-    g.fillRect(x, y + bh - 1, bw, 1);
-    g.fillRect(x, y, 1, bh);
-    g.fillRect(x + bw - 1, y, 1, bh);
-    drawText(g, label, x + bw / 2, y + 9, pulse ? "#f0d080" : "#c9a050", 1, "center");
-  }
-  const pulse = 0.7 + Math.sin(t * 5) * 0.3;
-  titleBtn(16, 166, 288, 28, "CLICK TO PLAY", pulse > 0.6);
+  const glow = 0.5 + Math.sin(t * 7) * 0.3;
+  g.fillStyle = "rgb(" + ((190 * glow) | 0) + "," + ((70 * glow) | 0) + ",14)";
+  g.fillRect(222, 110, 8, 10);
+  g.fillRect(246, 110, 8, 10);
+  g.fillRect(234, 132, 8, 10);
+  g.fillStyle = "#0c0a08";
+  g.fillRect(4, 4, 312, 44);
+  g.fillStyle = "#f0c44a";
+  g.fillRect(4, 4, 312, 2);
+  g.fillRect(4, 46, 312, 2);
+  drawText3D(g, "RISE OF THE TRIAD", 160, 8, "#f0c44a", "#6a3a08", 2);
+  drawText3D(g, "THE HUNT BEGINS", 160, 28, "#e02020", "#400808", 2);
+  drawText(g, "SHAREWARE E1A1", 160, 52, "#c8a060", 1, "center");
+  const pulse = 0.55 + Math.sin(t * 5) * 0.45;
+  drawText(g, "CLICK TO BEGIN", 160, 176, pulse > 0.5 ? "#fff0a0" : "#c9a050", 1, "center");
   g.fillStyle = "#140a08";
-  g.fillRect(252, 3, 62, 12);
+  g.fillRect(268, 3, 48, 11);
   g.fillStyle = "#3a2414";
-  g.fillRect(252, 3, 62, 1);
-  g.fillRect(252, 14, 62, 1);
-  drawText(g, "OPTS", 283, 5, "#886848", 1, "center");
-  drawText(g, musicMuted ? "M MUTED" : "M SOUND", 160, 156, "#886848", 1, "center");
+  g.fillRect(268, 3, 48, 1);
+  g.fillRect(268, 13, 48, 1);
+  drawText(g, "OPTS", 292, 5, "#886848", 1, "center");
+  const musicLine = musicMuted ? "M MUTED" : (musicBlocked ? "CLICK FOR MUSIC" : "M SOUND");
+  drawText(g, musicLine, 160, 188, musicBlocked ? "#f0c040" : "#886848", 1, "center");
 }
 
 function paintFace(g, x, y, hurt) {
@@ -1521,7 +1509,8 @@ function uiPos(e) {
 }
 
 function titleButtonAt(p) {
-  if (p.x >= 252 && p.x <= 314 && p.y >= 3 && p.y <= 16) return "controls";
+  if (p.x >= 268 && p.x <= 316 && p.y >= 3 && p.y <= 15) return "controls";
+  if (p.y >= 184 && p.y <= 198 && p.x >= 70 && p.x <= 250) return "mute";
   return null;
 }
 
@@ -3035,9 +3024,9 @@ function seatOpening() {
     meal.z = player.z + openFwdZ * 7.4 + openFwdX * 2.4;
     meal.mesh.position.set(meal.x, meal.y, meal.z);
   }
-  const yardDoor = doors.find((d) => d.kind === "gold" && d.z > player.z);
-  const keyX = yardDoor ? yardDoor.x : player.x + openFwdX * 8.2;
-  const keyZ = yardDoor ? yardDoor.z - 4.2 : player.z + 6.4;
+  const gCell = findCell("G");
+  const keyX = worldX(gCell.c);
+  const keyZ = worldZ(gCell.r);
   let key = pickups.find((p) => p.kind === "gold");
   if (!key) {
     makeGoldKey(keyX, 0.85, keyZ);
@@ -3738,15 +3727,21 @@ function bind() {
     }
     if (!started && screen === "title") {
       const p = uiPos(e);
-      if (p.y > 20) {
-        startGame();
-        return;
-      }
-      if (titleButtonAt(p) === "controls") {
+      const hit = titleButtonAt(p);
+      if (hit === "controls") {
         openOptions();
         if (e.preventDefault) e.preventDefault();
         return;
       }
+      if (hit === "mute") {
+        if (musicBlocked && !musicMuted && window.playTitleMusic) window.playTitleMusic();
+        else toggleMute();
+        if (e.preventDefault) e.preventDefault();
+        return;
+      }
+      if (window.playTitleMusic) window.playTitleMusic();
+      startGame();
+      return;
     }
     if (!started) startGame();
     else if (screen === "play") lockPointer();
