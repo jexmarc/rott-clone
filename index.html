@@ -44,7 +44,7 @@ const GRAV = 28;
 const PAD_UP = 24;
 const PLAYER_R = 0.32;
 const PLAYER_H = 1.58;
-const HEAD_MULT = 3.4;
+const HEAD_MULT = 1.85;
 const VW = 640;
 const VH = 400;
 const UW = 320;
@@ -1969,7 +1969,7 @@ function spawnEnemy(x, y, z, tough) {
   scene.add(g);
   enemies.push({
     group: g, body, head, x, y, z, vx: 0, vz: 0,
-    hp: tough ? 150 : 42, max: tough ? 150 : 42, tough,
+    hp: tough ? 220 : 130, max: tough ? 220 : 130, tough,
     opener: false,
     state: "idle", nextShot: 1.35 + Math.random(), dead: false, hurt: 0, flinch: 0
   });
@@ -1978,7 +1978,7 @@ function spawnEnemy(x, y, z, tough) {
 function markOpener(e) {
   if (!e) return;
   e.opener = true;
-  e.hp = e.max = 70;
+  e.hp = e.max = 130;
   const armband = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.1, 0.18), colMat(0xff2010));
   armband.position.set(-0.38, 1.28, 0.08);
   e.group.add(armband);
@@ -2312,7 +2312,9 @@ function hitscan(w) {
     return;
   }
   if (part === "barrel") { boomBarrel(best); return; }
-  const dmg = part === "head" ? w.dmg * HEAD_MULT : w.dmg;
+  let dmg = w.dmg;
+  if (part === "head") dmg *= bestD < 7 ? 3.5 : HEAD_MULT;
+  if (bestD > 12) dmg *= Math.max(0.72, 1 - (bestD - 12) * 0.018);
   hurtEnemy(best, dmg, part, origin.clone().add(dir.multiplyScalar(bestD)));
 }
 
