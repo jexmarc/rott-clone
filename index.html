@@ -2779,7 +2779,7 @@ function resetPlayer() {
   const py = (spawnZ && spawnZ.elevated) || cell(s.c, s.r) === "c" ? CAT_H : 0;
   player = {
     x: px, y: py, z: pz,
-    yaw: -Math.PI / 2,
+    yaw: Math.PI,
     pitch: 0.2,
     vx: 0, vy: 0, vz: 0,
     onGround: true, hp: 100, armor: 0,
@@ -3332,6 +3332,7 @@ function buildLevel() {
       }
       if (ch === "^") {
         const zn = zoneAt(c, r);
+        if (zn && zn.name === "start") continue;
         const py = (zn && zn.elevated) || cell(c, r) === "c" ? CAT_H : 0;
         placePad(x, py, z, !!(zn && zn.outdoor), true);
       }
@@ -3646,8 +3647,8 @@ function bind() {
       return;
     }
     if (!started || !player || optionsOpen || lookFreeze > 0) return;
-    player.yaw -= e.movementX * 0.00215 * lookSens;
-    player.pitch -= e.movementY * 0.00215 * lookSens;
+    player.yaw += e.movementX * 0.00215 * lookSens;
+    player.pitch += e.movementY * 0.00215 * lookSens;
     player.pitch = Math.max(-1.2, Math.min(1.2, player.pitch));
   }, true);
   ui.addEventListener("pointerdown", (e) => {
