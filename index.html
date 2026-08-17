@@ -51,39 +51,47 @@ const UW = 320;
 const UH = 200;
 
 const MAP = [
-  "####################################",
-  "#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~##",
-  "#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~##",
-  "#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~##",
-  "#~~~~~~~S~^~~1~~~~~~~~~~~~~~~~~~~~##",
-  "#~~~~~~~~~~~~H~~~~~~~~~~t~~R~~M~~~##",
-  "#~~~~~~~~~~~~~~~~~~~Z~~U~~~~~B~~~~##",
-  "#~~~~~~~G~~~~~~~~~~~~~~~~~~~~~~~~~##",
-  "########g###########################",
-  "#######...##########################",
-  "#######.1.##########################",
-  "#######.1.##########################",
-  "########D###########################",
-  "#####...H...########################",
-  "#####..1.1..########################",
-  "#####...U...########################",
-  "#####F.....F########################",
-  "#####.......########################",
-  "#####...H...########################",
-  "########D###########################",
-  "#.................................##",
-  "#.......L.........................##",
-  "#.........................R.......##",
-  "#.......H.........................##",
-  "#..1.........................1....##",
-  "#....F.....................F......##",
-  "#.................................##",
-  "########l###########################",
-  "#.................................##",
-  "#.......X.........................##",
-  "#....D.........1...........D......##",
-  "#.................................##",
-  "####################################"
+  "##############################################",
+  "#########............######.......############",
+  "#########...I..Q..H..######...H...############",
+  "#########............######.A.....############",
+  "############P##############.......############",
+  "###########ccccc##############P###############",
+  "###########cSccc#########..........###########",
+  "###########c^ccc#########..........###########",
+  "####~~~~~~~~~~~~~~~~~~~~#..B..B..B.#ccccccc###",
+  "####~~t~~~~~~~~~~~~~~t~~#.......H..#c1ccccc###",
+  "####~~~~~~~~~~~1~~~~~~~~#..B..B..B.#ccccHcc###",
+  "####~~~~~~~~~~~~~~~~~~~~#....1.....#ccccccc###",
+  "####~~H~~~~~~~~~^~~~~~~~#....D.....#ccccccc###",
+  "####~~~~~~~~~~~~~~~~~~~~#.........#...Y....###",
+  "####~~~~^~~~~~~~~~~~~~~~#.......H.#.M....Z.###",
+  "####~~~~~~~~~~~~~~1~~~~~#.1.......#.....H..###",
+  "####~~~~~1~~~~~~~~~~~~~~g.....1...D...1....###",
+  "####~~~~~~~#~~~~~~~~~~~~#.........#........###",
+  "####~~~t~~~~~~~~~~~H~~~~#.H.......#.R....U.###",
+  "####~~~~~~~~~~~~~#~~~~~~#.........#........###",
+  "####~~~~~~~~~~~~~~~~t~~~######D###############",
+  "####~~~1~~~~~~~~~~~~~~~~#.........############",
+  "####~~~~~~~~^~~~~~~~~~~~#.........#.........##",
+  "####~~~~~~~~~~~~~~~~~~~~#.1.......#.........##",
+  "####~~~~~~~~~~1~~~~~G~~~#...FF....#..1......##",
+  "####~~~~~~t~~~~~~~t~~~~~#...FF....D.........##",
+  "####~~~~~~~~~~~~~~~~~~~~#.......1.#......L..##",
+  "#########################..H......#.A.......##",
+  "#########################.........#.......H.##",
+  "############################P######.........##",
+  "#########################........######l######",
+  "#########################..H.....##.........##",
+  "#########################.....1..##..1......##",
+  "#########################........##......H..##",
+  "###################################.........##",
+  "#######################################D######",
+  "###################################.........##",
+  "###################################..1.Y....##",
+  "###################################....X....##",
+  "###################################.........##",
+  "##############################################"
 ];
 
 const W = MAP[0].length;
@@ -159,6 +167,8 @@ let hallEntered = false;
 let roomEntered = false;
 let floorEntered = false;
 let exitWingEntered = false;
+let lastZoneName = "";
+let ridePad = null;
 let player;
 let gunRoot, muzzle, gunFlash, gunLight;
 let pointerLocked = false;
@@ -337,6 +347,35 @@ function cell(c, r) {
 function worldX(c) { return (c - W / 2) * TILE; }
 function worldZ(r) { return (r - 2) * TILE; }
 function isWall(ch) { return ch === "#" || ch === " "; }
+
+const ZONES = [
+  { name: "secret", title: "TIMED VAULT", c0: 9, r0: 1, c1: 20, r1: 3, theme: "secret" },
+  { name: "crypt", title: "CRYPT", c0: 27, r0: 1, c1: 33, r1: 4, theme: "secret" },
+  { name: "start", title: "GAD LEDGE", c0: 11, r0: 5, c1: 15, r1: 7, theme: "start", outdoor: true, elevated: true },
+  { name: "west", title: "WEST HALL", c0: 25, r0: 8, c1: 28, r1: 12, theme: "hall" },
+  { name: "chapel", title: "CHAPEL", c0: 29, r0: 6, c1: 34, r1: 12, theme: "chapel" },
+  { name: "yard", title: "COURTYARD", c0: 4, r0: 8, c1: 23, r1: 26, theme: "yard", outdoor: true },
+  { name: "lobby", title: "LOBBY", c0: 25, r0: 13, c1: 33, r1: 19, theme: "lobby" },
+  { name: "fire", title: "FIRE PIT", c0: 25, r0: 21, c1: 33, r1: 28, theme: "fire" },
+  { name: "cellar", title: "CELLAR", c0: 25, r0: 30, c1: 32, r1: 33, theme: "secret" },
+  { name: "armory", title: "ARMORY", c0: 35, r0: 13, c1: 42, r1: 19, theme: "armory" },
+  { name: "catwalk", title: "CATWALK", c0: 36, r0: 8, c1: 42, r1: 12, theme: "catwalk", elevated: true },
+  { name: "silver", title: "SILVER KEY", c0: 35, r0: 22, c1: 43, r1: 29, theme: "silver" },
+  { name: "ante", title: "ANTECHAMBER", c0: 35, r0: 31, c1: 43, r1: 34, theme: "ante" },
+  { name: "exit", title: "EXIT", c0: 35, r0: 36, c1: 43, r1: 39, theme: "exit" }
+];
+
+function zoneAt(c, r) {
+  for (let i = 0; i < ZONES.length; i++) {
+    const z = ZONES[i];
+    if (c >= z.c0 && c <= z.c1 && r >= z.r0 && r <= z.r1) return z;
+  }
+  return null;
+}
+
+function zoneAtWorld(x, z) {
+  return zoneAt(Math.round(x / TILE + W / 2), Math.round(z / TILE + 2));
+}
 
 function hash(x, y) {
   let n = (x * 374761393 + y * 668265263) | 0;
@@ -969,7 +1008,8 @@ function floorKind() {
   const pos = playerCell();
   const ch = cell(pos.c, pos.r);
   if (ch === "c") return "metal";
-  if (pos.r <= 7 && ch !== ".") return "dirt";
+  const zn = zoneAt(pos.c, pos.r);
+  if (zn && zn.outdoor) return "dirt";
   return "stone";
 }
 
@@ -980,7 +1020,7 @@ function updateAmbience(dt, moving, running, airborne) {
   if (!amb.master) startAmbience();
   if (!amb.master) return;
   const t = ac.currentTime;
-  const yard = playerCell().r <= 7;
+  const yard = !!(player && inCourtyard(player.x, player.z));
   if (amb.windG) amb.windG.gain.setTargetAtTime(yard ? 0.55 : 0.28, t, 0.3);
   if (amb.airG) amb.airG.gain.setTargetAtTime(yard ? 0.32 : 0.2, t, 0.3);
   if (amb.torchG) amb.torchG.gain.setTargetAtTime((yard ? 0.12 : 0.2) * (0.7 + Math.random() * 0.5), t, 0.07);
@@ -1807,10 +1847,6 @@ function signpostPad(px, pz) {
 }
 
 function placePad(x, y, z, yard, force) {
-  const s = findCell("S");
-  const dist = Math.hypot(x - worldX(s.c), z - worldZ(s.r));
-  if (dist < TILE * 1.05) return;
-  if (!force && dist < TILE * 2.2) return;
   const group = new THREE.Group();
   const rad = yard ? 2.2 : 1.12;
   const base = new THREE.Mesh(
@@ -2579,7 +2615,6 @@ function die() {
 function win(secret) {
   if (!started || !player) return;
   if (inCourtyard(player.x, player.z)) return;
-  if (playerRow() < 12) return;
   pointerLocked = false;
   optionsOpen = false;
   slideDrag = false;
@@ -2674,6 +2709,14 @@ function use() {
     if (Math.hypot(player.x - p.x, player.z - p.z) < 2.7) {
       p.pushed = true;
       p.solid._open = true;
+      const ax = player.x - p.x, az = player.z - p.z;
+      if (Math.abs(az) >= Math.abs(ax)) {
+        p.dx = 0;
+        p.dz = az > 0 ? -1 : 1;
+      } else {
+        p.dx = ax > 0 ? -1 : 1;
+        p.dz = 0;
+      }
       SFX.door();
       showMsg("PUSHWALL");
       return;
@@ -2706,12 +2749,17 @@ function takePickup(p) {
   if (p.kind === "heat") { have[3] = true; reserve[3] += 6; if (mag[3] === 0) mag[3] = 5; wepI = 3; swapGun(); }
   if (p.kind === "drunk") { have[4] = true; reserve[4] += 5; if (mag[4] === 0) mag[4] = 4; wepI = 4; swapGun(); }
   if (p.kind === "health") {
-    player.hp = Math.min(100, player.hp + (p.yard ? 40 : 35));
-    if (window.console) console.log("[ROTT] MEAL", player.hp | 0);
+    if (p.label === "1UP") {
+      player.hp = 100;
+      player.armor = Math.max(player.armor, 50);
+    } else {
+      player.hp = Math.min(100, player.hp + (p.yard ? 40 : 35));
+    }
+    if (window.console) console.log("[ROTT] MEAL", player.hp | 0, p.label || "");
   }
   if (p.kind === "ammo") reserve[wepI] += weps[wepI].rocket ? 3 : 24;
   if (p.kind === "secret") {
-    if (!inCourtyard(player.x, player.z) && playerRow() >= 12) win(true);
+    if (!inCourtyard(player.x, player.z)) win(true);
   }
 }
 
@@ -2727,8 +2775,10 @@ function resetPlayer() {
   const s = findCell("S");
   const px = worldX(s.c);
   const pz = worldZ(s.r);
+  const spawnZ = zoneAt(s.c, s.r);
+  const py = (spawnZ && spawnZ.elevated) || cell(s.c, s.r) === "c" ? CAT_H : 0;
   player = {
-    x: px, y: 0, z: pz,
+    x: px, y: py, z: pz,
     yaw: -Math.PI / 2,
     pitch: 0.2,
     vx: 0, vy: 0, vz: 0,
@@ -2743,6 +2793,8 @@ function resetPlayer() {
   roomEntered = false;
   floorEntered = false;
   exitWingEntered = false;
+  lastZoneName = "";
+  ridePad = null;
   wepI = 0;
   mag = [24, 32, 6, 5, 4];
   reserve = [96, 64, 8, 6, 5];
@@ -2759,7 +2811,7 @@ function resetPlayer() {
   hitCueT = 0;
   hitMarkT = 0;
   lastSafe.x = px;
-  lastSafe.y = 0;
+  lastSafe.y = py;
   lastSafe.z = pz;
   if (gunRoot) swapGun();
 }
@@ -2893,12 +2945,6 @@ function feetOnPad(p) {
   p.z = w.z;
   const hitR = padHitR(p);
   if (player.y > w.y + 3.4 || player.y < w.y - 0.85) return false;
-  if (p.yard) {
-    const s = findCell("S");
-    const sx = worldX(s.c), sz = worldZ(s.r);
-    if (player.z > sz + 0.85) return false;
-    if (Math.abs(player.x - sx) < 2.1 && player.z >= sz - 0.25) return false;
-  }
   return Math.hypot(player.x - w.x, player.z - w.z) < hitR;
 }
 
@@ -2914,9 +2960,10 @@ function rideLaunchLook() {
 function bounceOff(p) {
   player.vy = PAD_UP;
   player.onGround = false;
-  player.y = Math.max(player.y, 0) + 2.15;
+  player.y = Math.max(player.y, p.y || 0) + 2.15;
   player.x = p.x;
   player.z = p.z;
+  ridePad = p;
   padAir = 1.8;
   padBoost = 0;
   player.pitch = -1.12;
@@ -3006,84 +3053,18 @@ function proveOpening() {
 
 function seatOpening() {
   if (!player || !camera) return;
-  clearLaunchLane(player.x, player.z, player.x + 16, player.z);
-  clearLaunchLane(player.x, player.z, player.x - 16, player.z);
-  aimEastYard();
-  const padDist = 7.2;
-  const guardDist = 9.8;
-  if (walkHitsWall(player.x, player.z, openFwdX, openFwdZ, 16)) {
-    aimEastYard();
-  }
-  const f = { x: openFwdX, z: openFwdZ };
-  const padX = player.x + f.x * padDist;
-  const padZ = player.z + f.z * padDist;
-  clearLaunchLane(player.x, player.z, player.x + f.x * 16, player.z + f.z * 16);
-  let pad = pads.find((p) => p.yard);
-  if (!pad) {
-    placePad(padX, 0, padZ, true, true);
-    pad = pads.find((p) => p.yard);
-  }
-  if (pad) {
-    pad.x = padX;
-    pad.z = padZ;
-    pad.y = 0;
-    pad.rad = 2.2;
-    pad.group.position.set(padX, 0, padZ);
-    pad.group.updateMatrixWorld(true);
-  }
-  const gx = player.x + openFwdX * guardDist;
-  const gz = player.z + openFwdZ * guardDist;
-  let e = enemies.find((en) => en.opener);
-  if (!e) {
-    spawnEnemy(gx, 0, gz, false);
-    markOpener(enemies[enemies.length - 1]);
-    e = enemies.find((en) => en.opener);
-  }
-  if (e) {
-    e.dead = false;
-    e.hp = e.max;
-    e.group.visible = true;
-    e.state = "idle";
-    e.x = gx;
-    e.z = gz;
-    e.group.position.set(gx, e.y, gz);
-  }
-  const meal = pickups.find((p) => p.kind === "health" && p.yard);
-  if (meal) {
-    meal.x = player.x - 3.2;
-    meal.z = player.z - 2.4;
-    meal.mesh.position.set(meal.x, meal.y, meal.z);
-  }
-  const south = southFwd();
-  const keyDist = 5.2;
-  const keyX = player.x + south.x * keyDist;
-  const keyZ = player.z + south.z * keyDist;
-  let key = pickups.find((p) => p.kind === "gold");
-  if (!key) {
-    makeGoldKey(keyX, 0.9, keyZ);
-    key = pickups.find((p) => p.kind === "gold");
-  }
-  if (key) {
-    key.x = keyX;
-    key.z = keyZ;
-    key.y = 0.9;
-    key.taken = false;
-    key.mesh.visible = true;
-    key.mesh.position.set(keyX, 0.9, keyZ);
-    key.mesh.updateMatrixWorld(true);
-    if (window.console) {
-      console.log("[ROTT] SOUTH KEY", keyX.toFixed(2), keyZ.toFixed(2), "ray", south.x.toFixed(2), south.z.toFixed(2));
-    }
-  }
-  if (pad) signpostPad(pad.x, pad.z);
-  const proof = proveOpening();
-  if (pad && (!proof.launched || proof.wall || !proof.padOnRay)) {
-    pad.x = player.x + openFwdX * padDist;
-    pad.z = player.z + openFwdZ * padDist;
-    pad.group.position.set(pad.x, 0, pad.z);
-    pad.group.updateMatrixWorld(true);
-    signpostPad(pad.x, pad.z);
-    proveOpening();
+  player.yaw = Math.PI;
+  player.pitch = 0.42;
+  applyLook();
+  const f = camForward();
+  openYaw = player.yaw;
+  openPitch = player.pitch;
+  openFwdX = f.x;
+  openFwdZ = f.z;
+  if (window.console) {
+    const key = pickups.find((p) => p.kind === "gold" && !p.taken);
+    console.log("[ROTT] START", player.x.toFixed(2), player.y.toFixed(2), player.z.toFixed(2));
+    if (key) console.log("[ROTT] GOLD KEY AT", key.x.toFixed(2), key.z.toFixed(2));
   }
 }
 
@@ -3144,7 +3125,11 @@ function hasLOS(e) {
 }
 
 function inCourtyard(x, z) {
-  return Math.round(z / TILE + 2) <= 7;
+  const zn = zoneAtWorld(x, z);
+  if (zn && zn.name === "start") return false;
+  if (zn && zn.name === "yard") return true;
+  const ch = cell(Math.round(x / TILE + W / 2), Math.round(z / TILE + 2));
+  return ch === "~" || ch === "t";
 }
 
 function playerCanSee(e) {
@@ -3170,10 +3155,8 @@ function updateEnemy(e, dt) {
   const yard = inCourtyard(player.x, player.z);
   if (yard) {
     if (invulnT > 0 || timeAlive < 3.2) return;
-    if (nearSpawn(player.x, player.z)) return;
-    if (!e.opener) return;
+    if (nearSpawn(player.x, player.z) && timeAlive < 6) return;
   }
-  if (inCourtyard(e.x, e.z) && !e.opener) return;
   const los = dist < 28 && hasLOS(e);
   if (los) e.state = dist < 11 ? "shoot" : "chase";
   else e.state = "idle";
@@ -3260,11 +3243,11 @@ function buildLevel() {
   );
   moon.position.set(78, 36, 10);
   scene.add(moon);
-  const yard = findCell("S");
+  const spawnCell = findCell("S");
   const spawnFill = new THREE.PointLight(0xffc040, 0.85, 16, 1.4);
-  spawnFill.position.set(worldX(yard.c + 2), 4.2, worldZ(yard.r));
+  spawnFill.position.set(worldX(spawnCell.c), CAT_H + 2.2, worldZ(spawnCell.r));
   scene.add(spawnFill);
-  const fx = worldX(yard.c + 12), fz = worldZ(Math.max(1, yard.r - 2));
+  const fx = worldX(14), fz = worldZ(16);
   const basin = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.32, 0.36, 10), new THREE.MeshLambertMaterial({ color: 0x6a4a30, emissive: 0x1a1008, flatShading: true }));
   basin.position.set(fx, 0.18, fz);
   scene.add(basin);
@@ -3280,92 +3263,19 @@ function buildLevel() {
   const fountLit = new THREE.PointLight(0x88a8b8, 0.35, 8, 1.6);
   fountLit.position.set(fx, 2.2, fz);
   scene.add(fountLit);
-  const doorFill = new THREE.PointLight(0xffb060, 0.45, 12, 1.5);
-  doorFill.position.set(worldX(8), 3.8, worldZ(7));
-  scene.add(doorFill);
-  const hallFill = new THREE.PointLight(0xffb060, 0.85, 10, 1.3);
-  hallFill.position.set(worldX(8), 3.2, worldZ(9));
-  scene.add(hallFill);
-  const hallFill2 = new THREE.PointLight(0xff8040, 0.7, 9, 1.4);
-  hallFill2.position.set(worldX(8), 3.0, worldZ(11));
-  scene.add(hallFill2);
-  const roomFill = new THREE.PointLight(0xff6030, 0.95, 14, 1.2);
-  roomFill.position.set(worldX(8), 3.1, worldZ(14));
-  scene.add(roomFill);
-  const roomFill2 = new THREE.PointLight(0x40a060, 0.55, 12, 1.4);
-  roomFill2.position.set(worldX(8), 2.8, worldZ(17));
-  scene.add(roomFill2);
-  const floorFill = new THREE.PointLight(0xc8a070, 0.72, 22, 1.2);
-  floorFill.position.set(worldX(8), 3.4, worldZ(22));
-  scene.add(floorFill);
-  const floorFill2 = new THREE.PointLight(0xb89060, 0.55, 18, 1.3);
-  floorFill2.position.set(worldX(16), 3.2, worldZ(25));
-  scene.add(floorFill2);
-  const exitFill = new THREE.PointLight(0x50ff80, 1.6, 20, 1.05);
-  exitFill.position.set(worldX(11), 3.2, worldZ(29));
-  scene.add(exitFill);
-  for (let r = 13; r <= 18; r++) {
-    const runner = new THREE.Mesh(
-      new THREE.BoxGeometry(1.15, 0.05, TILE),
-      new THREE.MeshBasicMaterial({ color: 0x8a1820 })
-    );
-    runner.position.set(worldX(8), 0.04, worldZ(r));
-    scene.add(runner);
-    const grate = new THREE.Mesh(
-      new THREE.BoxGeometry(2.4, 0.04, 0.18),
-      new THREE.MeshBasicMaterial({ color: 0x3a2a20 })
-    );
-    grate.position.set(worldX(6.5), 0.05, worldZ(r));
-    scene.add(grate);
-    const grate2 = grate.clone();
-    grate2.position.set(worldX(9.5), 0.05, worldZ(r));
-    scene.add(grate2);
-    const pipe = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.09, 0.09, 8.6, 6),
-      new THREE.MeshBasicMaterial({ color: 0x4a3a28 })
-    );
-    pipe.rotation.z = Math.PI / 2;
-    pipe.position.set(worldX(8), 4.15, worldZ(r));
-    scene.add(pipe);
-  }
-  for (const [c, r, face] of [[5, 13, 1], [11, 13, -1], [5, 17, 1], [11, 17, -1]]) {
-    addSconce(worldX(c) + face * 0.15, 2.2, worldZ(r), face);
-    const brazier = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.28, 0.36, 0.7, 6),
-      new THREE.MeshLambertMaterial({ color: 0x4a2010, emissive: 0x220800, flatShading: true })
-    );
-    brazier.position.set(worldX(c) + face * 0.2, 0.35, worldZ(r));
-    scene.add(brazier);
-    const coal = new THREE.Mesh(new THREE.SphereGeometry(0.22, 6, 6), new THREE.MeshBasicMaterial({ color: 0xff5510 }));
-    coal.position.set(worldX(c) + face * 0.2, 0.78, worldZ(r));
-    scene.add(coal);
-  }
-  for (const r of [9, 10, 11]) {
-    addSconce(worldX(7) - 1.42, 2.15, worldZ(r), 1);
-    addSconce(worldX(9) + 1.42, 2.15, worldZ(r), -1);
-    addBeam(worldX(8), 3.42, worldZ(r), 9.2, 0.38);
-    addTrim(worldX(7) - 1.48, 1.05, worldZ(r), 0.1, 0.22, 3.0, 0x2a1c10);
-    addTrim(worldX(9) + 1.48, 1.05, worldZ(r), 0.1, 0.22, 3.0, 0x2a1c10);
-    addTrim(worldX(7) - 1.48, 3.28, worldZ(r), 0.1, 0.16, 3.0, 0x24180e);
-    addTrim(worldX(9) + 1.48, 3.28, worldZ(r), 0.1, 0.16, 3.0, 0x24180e);
-    const grime = new THREE.Mesh(
-      new THREE.PlaneGeometry(2.4, 2.8),
-      new THREE.MeshBasicMaterial({ color: 0x1a120c, transparent: true, opacity: 0.28, depthWrite: false })
-    );
-    grime.rotation.x = -Math.PI / 2;
-    grime.position.set(worldX(8) + ((r & 1) ? 0.4 : -0.35), 0.03, worldZ(r));
-    scene.add(grime);
-  }
-  for (const [c, r] of [[4, 2], [8, 1], [20, 1], [26, 2], [30, 3], [32, 6]]) {
-    const torch = new THREE.PointLight(0xffa050, 0.55, 10, 1.6);
-    torch.position.set(worldX(c), 3.4, worldZ(r));
-    scene.add(torch);
-    const bowl = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.28, 2.4, 6), new THREE.MeshLambertMaterial({ color: 0x6a3a18, emissive: 0x331104, flatShading: true }));
-    bowl.position.set(worldX(c), 1.2, worldZ(r));
-    scene.add(bowl);
-    const flame = new THREE.Mesh(new THREE.SphereGeometry(0.22, 6, 6), new THREE.MeshBasicMaterial({ color: 0xff8844 }));
-    flame.position.set(worldX(c), 2.55, worldZ(r));
-    scene.add(flame);
+  for (let i = 0; i < ZONES.length; i++) {
+    const z = ZONES[i];
+    const cx = worldX((z.c0 + z.c1) / 2);
+    const cz = worldZ((z.r0 + z.r1) / 2);
+    const col = z.theme === "fire" ? 0xff6030 : (z.theme === "exit" ? 0x50ff80 : (z.theme === "silver" ? 0xa0c0e0 : (z.outdoor ? 0x88a0c8 : 0xffb060)));
+    const lit = new THREE.PointLight(col, z.outdoor ? 0.45 : 0.8, z.outdoor ? 22 : 14, 1.3);
+    lit.position.set(cx, z.elevated ? CAT_H + 2.2 : 3.1, cz);
+    scene.add(lit);
+    if (!z.outdoor) {
+      const plaque = makeLabel(z.title);
+      plaque.position.set(cx, z.elevated ? CAT_H + 2.4 : 3.35, cz);
+      scene.add(plaque);
+    }
   }
 
   for (let r = 0; r < H; r++) {
@@ -3373,24 +3283,22 @@ function buildLevel() {
       const ch = cell(c, r);
       if (ch === " " || ch === "#") continue;
       const x = worldX(c), z = worldZ(r);
+      const zn = zoneAt(c, r);
       let y0 = 0;
       if (ch === ",") y0 = -2.2;
-      if (ch === "c") y0 = CAT_H;
-      const outdoor = r <= 7 && ch !== "#" && ch !== " " && ch !== ".";
-      const monk = r >= 13 && r <= 18;
-      const share = r >= 20 && r <= 26;
-      const exitWing = r >= 27;
-      const hall = r >= 8 && r <= 12;
+      if (ch === "c" || (zn && zn.elevated)) y0 = CAT_H;
+      const outdoor = !!(zn && zn.outdoor);
+      const theme = zn ? zn.theme : "";
       const fl = new THREE.Mesh(
         new THREE.BoxGeometry(TILE, 0.22, TILE),
-        outdoor ? mDirt : (ch === "c" ? mMetal : (ch === "," ? mDark : (hall ? mHallFloor : (monk ? mMonkFloor : (share ? mShareFloor : (exitWing ? mExitFloor : mFloor))))))
+        outdoor ? mDirt : (ch === "c" || theme === "catwalk" ? mMetal : (theme === "fire" ? mMonkFloor : (theme === "exit" ? mExitFloor : (theme === "hall" || theme === "lobby" ? mHallFloor : (theme === "silver" || theme === "ante" ? mShareFloor : mFloor)))))
       );
       fl.position.set(x, y0 - 0.11, z);
       scene.add(fl);
       if (!outdoor && ch !== "^") {
-        const ceilMat = hall ? mHallCeil : (monk ? mMonkCeil : (share ? mFloorCeil : (exitWing ? mExitCeil : mCeil)));
-        const ceil = new THREE.Mesh(new THREE.BoxGeometry(TILE, hall ? 0.28 : 0.16, TILE), ceilMat);
-        ceil.position.set(x, hall ? 3.58 : WALL_H + 0.18, z);
+        const ceilMat = theme === "fire" ? mMonkCeil : (theme === "exit" ? mExitCeil : (theme === "hall" || theme === "lobby" ? mHallCeil : mCeil));
+        const ceil = new THREE.Mesh(new THREE.BoxGeometry(TILE, 0.2, TILE), ceilMat);
+        ceil.position.set(x, theme === "hall" ? 3.58 : WALL_H + 0.18, z);
         scene.add(ceil);
       }
     }
@@ -3400,13 +3308,11 @@ function buildLevel() {
     for (let c = 0; c < W; c++) {
       if (cell(c, r) !== "#") continue;
       const x = worldX(c), z = worldZ(r);
-      const indoorN = !isWall(cell(c, r + 1)) && cell(c, r + 1) !== "~" && cell(c, r + 1) !== "S" && cell(c, r + 1) !== "t";
-      const hallN = ((r >= 8 && r <= 12) || ((r + 1) >= 8 && (r + 1) <= 12)) && indoorN;
-      const monkN = (r + 1) >= 13 && (r + 1) <= 18 && indoorN;
-      const shareN = r >= 20 && r <= 27;
-      const exitN = r >= 28;
+      const nb = zoneAt(c, r + 1) || zoneAt(c, r - 1) || zoneAt(c + 1, r) || zoneAt(c - 1, r);
+      const theme = nb ? nb.theme : "";
+      const indoorN = nb && !nb.outdoor;
       const sunken = cell(c, r + 1) === "," || cell(c, r - 1) === ",";
-      const wallMat = sunken ? mDark : (exitN ? mExitWall : (monkN ? mMonkWall : (hallN ? mHallWall : (shareN ? mStone : (indoorN ? mBlock : mStone)))));
+      const wallMat = sunken ? mDark : (theme === "exit" ? mExitWall : (theme === "fire" ? mMonkWall : (theme === "hall" || theme === "lobby" ? mHallWall : (indoorN ? mBlock : mStone))));
       boxAt(x, sunken ? -2.2 : 0, z, TILE, sunken ? WALL_H + 2.2 : WALL_H, TILE, wallMat, true);
     }
   }
@@ -3426,18 +3332,20 @@ function buildLevel() {
         light.position.set(x, 2.5, z);
         scene.add(light);
       }
-      if (ch === "^") placePad(x, 0, z, r <= 7, r <= 7);
+      if (ch === "^") {
+        const zn = zoneAt(c, r);
+        const py = (zn && zn.elevated) || cell(c, r) === "c" ? CAT_H : 0;
+        placePad(x, py, z, !!(zn && zn.outdoor), true);
+      }
       if (ch === "1") {
         const n = enemies.length;
         spawnEnemy(x, 0, z, false);
         if (enemies.length > n) {
           const spawned = enemies[enemies.length - 1];
-          if (r <= 7 && !enemies.some((en) => en.opener)) markOpener(spawned);
-          if (r >= 9 && r <= 11) {
-            spawned.hall = true;
-            spawned.hp = spawned.max = 55;
-          }
-          if (r >= 13 && r <= 18) spawned.room = true;
+          const zn = zoneAt(c, r);
+          if (zn && zn.name === "yard" && !enemies.some((en) => en.opener)) markOpener(spawned);
+          if (zn && (zn.theme === "hall" || zn.theme === "lobby")) spawned.hall = true;
+          if (zn && zn.theme === "fire") spawned.room = true;
         }
       }
       if (ch === "2") spawnEnemy(x, 0, z, true);
@@ -3448,49 +3356,36 @@ function buildLevel() {
       if (ch === "Z") makePickup(x, 0.6, z, "bazooka", new THREE.MeshLambertMaterial({ color: 0x4a3a14, emissive: 0x221100, flatShading: true }), "BAZOOKA");
       if (ch === "R") makePickup(x, 0.6, z, "heat", new THREE.MeshLambertMaterial({ color: 0x8a2010, emissive: 0x401000, flatShading: true }), "HEAT SEEKER");
       if (ch === "U") makePickup(x, 0.6, z, "drunk", new THREE.MeshLambertMaterial({ color: 0x8a6a20, emissive: 0x332200, flatShading: true }), "DRUNK MISSILES");
-      if (ch === "H") makeMonkMeal(x, 0.6, z, r <= 7);
+      if (ch === "H") makeMonkMeal(x, 0.6, z, !!(zoneAt(c, r) && zoneAt(c, r).outdoor));
+      if (ch === "I") {
+        makeMonkMeal(x, 0.6, z, false);
+        const last = pickups[pickups.length - 1];
+        if (last) last.label = "1UP";
+      }
       if (ch === "A") makePickup(x, 0.6, z, "ammo", new THREE.MeshLambertMaterial({ color: 0xc8a020, flatShading: true }), "AMMO");
       if (ch === "N") makePickup(x, -1.6, z, "drunk", new THREE.MeshLambertMaterial({ color: 0x8a6a20, emissive: 0x332200, flatShading: true }), "DRUNK MISSILES");
       if (ch === "D" || ch === "g" || ch === "l" || ch === "Q") {
         const kind = ch === "g" ? "gold" : ch === "l" ? "silver" : ch === "Q" ? "timed" : "free";
-        const hallOut = kind === "free" && r === 12;
-        const floorOut = kind === "free" && r === 19;
         const doorMat = kind === "gold"
-          ? (r <= 8 ? new THREE.MeshBasicMaterial({ color: 0xffc030 }) : mGold)
-          : kind === "silver" ? new THREE.MeshBasicMaterial({ color: 0xe8f0ff }) : (hallOut ? new THREE.MeshBasicMaterial({ color: 0x70a0a0 }) : (floorOut ? new THREE.MeshBasicMaterial({ color: 0xc8a050 }) : mMetal));
-        const dm = boxAt(x, 0, z, TILE * 0.92, WALL_H - 0.12, (kind === "gold" && r <= 8) || hallOut || floorOut || kind === "silver" ? 0.42 : 0.32, doorMat, true);
-        doors.push({ x, z, kind, mesh: dm, open: false, solid: solids[solids.length - 1], hallOut, floorOut });
+          ? new THREE.MeshBasicMaterial({ color: 0xffc030 })
+          : kind === "silver" ? new THREE.MeshBasicMaterial({ color: 0xe8f0ff }) : (kind === "timed" ? new THREE.MeshBasicMaterial({ color: 0xc07020 }) : mMetal);
+        const dm = boxAt(x, 0, z, TILE * 0.92, WALL_H - 0.12, kind === "gold" || kind === "silver" ? 0.42 : 0.32, doorMat, true);
+        doors.push({ x, z, kind, mesh: dm, open: false, solid: solids[solids.length - 1] });
         if (kind === "timed") timedDoor = doors[doors.length - 1];
         if (kind === "silver") {
           const tag = makeLabel("SILVER");
-          tag.position.set(x, 3.15, z - 0.35);
+          tag.position.set(x, 3.15, z);
           scene.add(tag);
           const lit = new THREE.PointLight(0xd0e8ff, 0.8, 11, 1.5);
-          lit.position.set(x, 3.1, z + 1.1);
+          lit.position.set(x, 3.1, z);
           scene.add(lit);
         }
-        if (kind === "gold" && r <= 8) {
+        if (kind === "gold") {
           const tag = makeLabel("GOLD");
-          tag.position.set(x, 3.15, z - 0.4);
+          tag.position.set(x, 3.15, z);
           scene.add(tag);
-          const lit = new THREE.PointLight(0xffc040, 0.85, 11, 1.5);
-          lit.position.set(x, 3.2, z - 1.2);
-          scene.add(lit);
-        }
-        if (hallOut) {
-          const tag = makeLabel("HALL");
-          tag.position.set(x, 3.15, z - 0.35);
-          scene.add(tag);
-          const lit = new THREE.PointLight(0x80c0c0, 0.7, 10, 1.5);
-          lit.position.set(x, 3.1, z + 1.1);
-          scene.add(lit);
-        }
-        if (floorOut) {
-          const tag = makeLabel("FLOOR");
-          tag.position.set(x, 3.15, z - 0.35);
-          scene.add(tag);
-          const lit = new THREE.PointLight(0xe0b050, 0.75, 11, 1.5);
-          lit.position.set(x, 3.1, z + 1.1);
+          const lit = new THREE.PointLight(0xffc040, 0.85, 14, 1.5);
+          lit.position.set(x, 3.2, z);
           scene.add(lit);
         }
       }
@@ -3537,73 +3432,18 @@ function buildLevel() {
     }
   }
 
-  for (const [c, r] of [[2, 5], [32, 1], [31, 4]]) {
-    if (cell(c, r) === "#") continue;
-    boxAt(worldX(c), 0, worldZ(r), 0.72, 0.85, 0.72, mat(crateTex), true);
-  }
-
-  for (const [c, r] of [[5, 15], [11, 16], [3, 22], [14, 23], [22, 24], [30, 22]]) {
+  for (const [c, r] of [[26, 14], [32, 14], [26, 18], [32, 18], [30, 8], [36, 16]]) {
+    if (isWall(cell(c, r))) continue;
     const x = worldX(c), z = worldZ(r);
     const b = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 2.1), mBanner);
-    b.position.set(x + (c < 8 ? 1.55 : -1.55), 2.4, z);
-    b.rotation.y = c < 8 ? Math.PI / 2 : -Math.PI / 2;
+    b.position.set(x, 2.4, z);
     scene.add(b);
   }
-  for (const [c, r] of [[3, 22], [3, 25], [14, 22], [14, 25], [20, 23], [30, 22], [30, 25]]) {
-    if (isWall(cell(c, r))) continue;
-    boxAt(worldX(c), 0, worldZ(r), 0.7, 3.4, 0.7, mStone, true);
-    addBeam(worldX(c), 3.9, worldZ(r), 1.4, 1.4);
-  }
-  for (const [c, r] of [[2, 23], [16, 24], [28, 23]]) {
-    if (isWall(cell(c, r))) continue;
-    boxAt(worldX(c), 0, worldZ(r), 0.72, 0.85, 0.72, mat(crateTex), true);
-  }
-  const exitCell = findCell("X");
-  if (exitCell) {
-    const hang = makeExitMark();
-    hang.position.set(worldX(exitCell.c), 2.65, worldZ(27));
-    hang.rotation.y = Math.PI;
-    scene.add(hang);
-    const path = new THREE.Mesh(
-      new THREE.BoxGeometry(2.2, 0.05, TILE * 3.2),
-      new THREE.MeshBasicMaterial({ color: 0x1a8040 })
-    );
-    path.position.set(worldX(exitCell.c), 0.04, (worldZ(27) + worldZ(exitCell.r)) * 0.5);
-    scene.add(path);
-  }
-
-  const gad = findCell("S");
-  const gadX = worldX(2), gadZ = worldZ(Math.max(1, gad.r - 2));
-  for (let i = 0; i < 5; i++) {
-    const disk = new THREE.Mesh(new THREE.CylinderGeometry(1.08, 1.1, 0.14, 12), mat(gadTex, 0xffffff, 0x332200));
-    disk.position.set(gadX, 1.2 + i * 1.35, gadZ);
-    scene.add(disk);
-  }
-
-  const extraPads = [];
-  for (const [c, r, y] of extraPads) {
-    if (c >= W || r >= H) continue;
-    const ch = cell(c, r);
-    if (isWall(ch) || ch === "^") continue;
-    placePad(worldX(c), y, worldZ(r));
-  }
-  const s = findCell("S");
-  if (!pads.some((p) => p.yard)) {
-    placePad(worldX(s.c + 3), 0, worldZ(s.r), true, true);
-  }
-  if (!enemies.some((en) => en.opener && !en.dead)) {
-    spawnEnemy(worldX(s.c + 5), 0, worldZ(s.r), false);
-    markOpener(enemies[enemies.length - 1]);
-  }
-  if (!pickups.some((p) => p.kind === "health" && p.yard)) {
-    makeMonkMeal(worldX(s.c + 5), 0.6, worldZ(s.r + 1), true);
-  }
-  const yardPad = pads.find((p) => p.yard);
-  if (yardPad) signpostPad(yardPad.x, yardPad.z);
 
   for (let r = 0; r < H; r++) {
     for (let c = 0; c < W; c++) {
-      if (cell(c, r) !== "c") continue;
+      const zn = zoneAt(c, r);
+      if (cell(c, r) !== "c" && !(zn && zn.elevated)) continue;
       addSolid(worldX(c), CAT_H - 0.2, worldZ(r), TILE, 0.25, TILE, null);
     }
   }
@@ -3691,6 +3531,8 @@ function startGame() {
   }
   for (const p of pushwalls) {
     p.pushed = false; p.t = 0;
+    p.dx = 0; p.dz = 1;
+    p.mesh.position.x = p.x;
     p.mesh.position.z = p.z;
     if (p.solid) p.solid._open = false;
   }
@@ -3792,7 +3634,7 @@ function bind() {
     if (pointerLocked) {
       wantLock = false;
       clearLockHint();
-      if (started && !goldDoorOpen && playerRow() <= 7 && timeAlive < 0.25) lookFreeze = Math.max(lookFreeze, 0.15);
+      if (started && !goldDoorOpen && inCourtyard(player.x, player.z) && timeAlive < 0.25) lookFreeze = Math.max(lookFreeze, 0.15);
     }
     if (!pointerLocked && ignoreUnlock) ignoreUnlock = false;
   };
@@ -3901,45 +3743,39 @@ function tick(dt) {
     return;
   }
   timeAlive += dt;
-  if (goldDoorOpen || playerRow() > 7) lookFreeze = 0;
-  if (goldDoorOpen && !hallEntered && playerRow() >= 9) {
-    hallEntered = true;
-    if (window.console) console.log("[ROTT] HALL", player.x.toFixed(2), player.z.toFixed(2));
-  }
-  if (!roomEntered && playerRow() >= 13 && playerRow() <= 18) {
-    roomEntered = true;
-    if (window.console) console.log("[ROTT] ROOM", player.x.toFixed(2), player.z.toFixed(2));
-  }
-  if (!floorEntered && playerRow() >= 20 && playerRow() <= 26) {
-    floorEntered = true;
-    if (window.console) console.log("[ROTT] FLOOR", player.x.toFixed(2), player.z.toFixed(2));
-  }
-  if (!exitWingEntered && playerRow() >= 28) {
-    exitWingEntered = true;
-    if (window.console) console.log("[ROTT] EXIT WING", player.x.toFixed(2), player.z.toFixed(2));
+  if (goldDoorOpen || !inCourtyard(player.x, player.z)) lookFreeze = 0;
+  const zn = zoneAtWorld(player.x, player.z);
+  if (zn && zn.name !== lastZoneName) {
+    lastZoneName = zn.name;
+    if (window.console) console.log("[ROTT] ROOM", zn.title, player.x.toFixed(2), player.z.toFixed(2));
   }
   if (scene && scene.fog) {
-    const pr = playerRow();
-    if (pr >= 8 && pr <= 12) {
-      scene.fog.near = 4;
-      scene.fog.far = 22;
-      scene.fog.color.setHex(0x120c08);
-      scene.background.setHex(0x0c0806);
-    } else if (pr >= 13 && pr <= 19) {
-      scene.fog.near = 8;
-      scene.fog.far = 40;
-      scene.fog.color.setHex(0x1a120c);
-      scene.background.setHex(0x140e0a);
-    } else if (pr >= 28) {
+    const theme = zn ? zn.theme : "";
+    if (theme === "fire") {
+      scene.fog.near = 6;
+      scene.fog.far = 28;
+      scene.fog.color.setHex(0x2a0c06);
+      scene.background.setHex(0x1a0804);
+    } else if (theme === "exit") {
       scene.fog.near = 10;
       scene.fog.far = 55;
       scene.fog.color.setHex(0x1a5030);
       scene.background.setHex(0x143828);
-    } else if (pr >= 20) {
-      scene.fog.near = 16;
-      scene.fog.far = 70;
-      scene.fog.color.setHex(0x2a2218);
-      scene.background.setHex(0x1a1610);
+    } else if (theme === "yard" || theme === "start") {
+      scene.fog.near = 50;
+      scene.fog.far = 200;
+      scene.fog.color.setHex(0x1a1830);
+      scene.background.setHex(0x0a0818);
+    } else if (theme === "silver" || theme === "ante") {
+      scene.fog.near = 8;
+      scene.fog.far = 36;
+      scene.fog.color.setHex(0x141820);
+      scene.background.setHex(0x0c1016);
+    } else if (zn && !zn.outdoor) {
+      scene.fog.near = 8;
+      scene.fog.far = 40;
+      scene.fog.color.setHex(0x1a120c);
+      scene.background.setHex(0x140e0a);
     } else {
       scene.fog.near = 50;
       scene.fog.far = 200;
@@ -3956,6 +3792,7 @@ function tick(dt) {
   }
   rideLaunchLook();
   if (padAir > 0) padAir -= dt;
+  else ridePad = null;
   if (suppressShot > 0) suppressShot -= dt;
   if (invulnT > 0) invulnT -= dt;
   if (msgT > 0) msgT -= dt;
@@ -3983,10 +3820,9 @@ function tick(dt) {
     padBoost = 0;
     wishX = 0;
     wishZ = 0;
-    const yardPad = pads.find((p) => p.yard);
-    if (yardPad) {
-      player.x = yardPad.x;
-      player.z = yardPad.z;
+    if (ridePad) {
+      player.x = ridePad.x;
+      player.z = ridePad.z;
     }
   } else if (padBoost > 0) {
     padBoost -= dt;
@@ -4089,7 +3925,8 @@ function tick(dt) {
   for (const p of pushwalls) {
     if (p.pushed && p.t < 1) {
       p.t = Math.min(1, p.t + dt * 0.7);
-      p.mesh.position.z = p.z + p.t * TILE * 2.2;
+      p.mesh.position.x = p.x + p.t * TILE * 2.2 * (p.dx || 0);
+      p.mesh.position.z = p.z + p.t * TILE * 2.2 * (p.dz || 1);
     }
   }
   for (const el of elevators) {
@@ -4117,7 +3954,13 @@ function tick(dt) {
     showMsg("TIMED DOOR SHUT");
   }
 
-  if (exitTrig && playerRow() >= 12 && Math.hypot(player.x - exitTrig.x, player.z - exitTrig.z) < (exitTrig.r || 2.4)) win(false);
+  if (exitTrig && !inCourtyard(player.x, player.z) && Math.hypot(player.x - exitTrig.x, player.z - exitTrig.z) < (exitTrig.r || 2.4)) win(false);
+  for (let r = 0; r < H; r++) {
+    for (let c = 0; c < W; c++) {
+      if (cell(c, r) !== "F") continue;
+      if (Math.hypot(player.x - worldX(c), player.z - worldZ(r)) < 1.15) hurtPlayer(2, worldX(c), worldZ(r));
+    }
+  }
 
   if (reloading > 0) {
     reloading -= dt;
