@@ -788,6 +788,51 @@ const SFX = {
   enemyShot() {
     crack(0.28);
     thump(70, 0.06, 0.18);
+  },
+  bark() {
+    initAudio();
+    if (!ac) return;
+    const t = ac.currentTime;
+    const dest = ac.destination;
+    const glot = ac.createOscillator();
+    glot.type = "sawtooth";
+    glot.frequency.setValueAtTime(98, t);
+    glot.frequency.exponentialRampToValueAtTime(68, t + 0.42);
+    const sub = ac.createOscillator();
+    sub.type = "square";
+    sub.frequency.setValueAtTime(49, t);
+    sub.frequency.exponentialRampToValueAtTime(36, t + 0.42);
+    const f1 = ac.createBiquadFilter();
+    f1.type = "bandpass";
+    f1.frequency.setValueAtTime(640, t);
+    f1.frequency.exponentialRampToValueAtTime(420, t + 0.36);
+    f1.Q.value = 5.5;
+    const f2 = ac.createBiquadFilter();
+    f2.type = "bandpass";
+    f2.frequency.setValueAtTime(1180, t);
+    f2.frequency.exponentialRampToValueAtTime(780, t + 0.36);
+    f2.Q.value = 4.8;
+    const chest = ac.createBiquadFilter();
+    chest.type = "lowpass";
+    chest.frequency.value = 320;
+    const g = ac.createGain();
+    g.gain.setValueAtTime(0.001, t);
+    g.gain.exponentialRampToValueAtTime(0.95, t + 0.025);
+    g.gain.exponentialRampToValueAtTime(0.42, t + 0.16);
+    g.gain.exponentialRampToValueAtTime(0.0008, t + 0.48);
+    glot.connect(f1);
+    glot.connect(f2);
+    sub.connect(chest);
+    f1.connect(g);
+    f2.connect(g);
+    chest.connect(g);
+    g.connect(dest);
+    glot.start(t);
+    sub.start(t);
+    glot.stop(t + 0.5);
+    sub.stop(t + 0.5);
+    blast(0.14, 0.42, 780, "bandpass", 1.15);
+    kick(46, 0.22, 0.7);
   }
 };
 
@@ -925,6 +970,47 @@ const TAUNTS = [
   "KISS THE MASONRY",
   "ONE LESS CULTIST"
 ];
+
+const BARKS = ["YOU'RE DONE", "STAY DOWN", "GOT YOU"];
+let barkI = 0;
+let barkLock = 0;
+
+function pickMaleVoice() {
+  const list = (window.speechSynthesis && window.speechSynthesis.getVoices()) || [];
+  return list.find((v) => /male|daniel|david|alex|fred|bruce|tom|google uk english male/i.test(v.name)) || list[0] || null;
+}
+
+function speakBark(line) {
+  if (window.console) console.log("[ROTT] BARK", line);
+  initAudio();
+  SFX.bark();
+  if (!window.speechSynthesis) return;
+  try {
+    window.speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(line.toLowerCase());
+    u.pitch = 0.32;
+    u.rate = 0.84;
+    u.volume = 1;
+    const voice = pickMaleVoice();
+    if (voice) u.voice = voice;
+    window.speechSynthesis.speak(u);
+  } catch (err) {}
+}
+
+function killBark(force) {
+  const now = performance.now() / 1000;
+  if (!force && now < barkLock) return;
+  barkLock = now + 0.85;
+  const line = force ? BARKS[0] : BARKS[barkI++ % BARKS.length];
+  speakBark(line);
+}
+
+if (window.speechSynthesis) {
+  window.speechSynthesis.getVoices();
+  if (window.speechSynthesis.onvoiceschanged !== undefined) {
+    window.speechSynthesis.onvoiceschanged = pickMaleVoice;
+  }
+}
 
 function drawText(g, str, x, y, color, scale, align) {
   str = String(str).toUpperCase();
@@ -1653,10 +1739,10 @@ function spawnEnemy(x, y, z, tough) {
   const s = findCell("S");
   if (Math.hypot(x - worldX(s.c), z - worldZ(s.r)) < TILE * 3.2) return;
   const g = new THREE.Group();
-  const vest = tough ? 0x242820 : 0x2e3226;
-  const pants = tough ? 0x4a3c24 : 0x8a6e3c;
+  const vest = 0x2e3226;
+  const pants = 0x8a6e3c;
   const skin = 0xe8b878;
-  const helm = tough ? 0x3a3e42 : 0x5c626a;
+  const helm = 0x5c626a;
   const boot = 0x1a1410;
   const bootL = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.14, 0.28), colMat(boot));
   const bootR = bootL.clone();
@@ -1720,7 +1806,7 @@ function spawnEnemy(x, y, z, tough) {
     armL, armR, handL, handR, gun, barrel, mag, stock, bootL, bootR, legL, legR, hit
   );
   g.position.set(x, y, z);
-  g.scale.set(1.18, 1.18, 1.18);
+  g.scale.set(1.28, 1.28, 1.28);
   scene.add(g);
   enemies.push({
     group: g, body, head, x, y, z, vx: 0, vz: 0,
@@ -1761,7 +1847,7 @@ function sitLimb(w, h, d, color, x, z, ox, oz) {
   m.position.set(x + ox, 0.07 + h * 0.5, z + oz);
   m.rotation.set((Math.random() - 0.5) * 0.35, Math.random() * 6.28, (Math.random() - 0.5) * 0.45);
   scene.add(m);
-  gibs.push({ mesh: m, vx: 0, vy: 0, vz: 0, life: 18, grounded: true });
+  gibs.push({ mesh: m, vx: 0, vy: 0, vz: 0, life: 36, grounded: true });
 }
 
 function spawnFloorLimbs(x, z, scale) {
@@ -1779,27 +1865,22 @@ function spawnFloorLimbs(x, z, scale) {
   sitLimb(0.09 * s, 0.3 * s, 0.1 * s, 0x1a1a14, x, z, 0.35, -0.7);
 }
 
-function spawnGibs(x, y, z, n, color) {
+function spawnKillPile(x, z, scale) {
   SFX.gib();
-  spawnFloorLimbs(x, z, 1);
-  const extra = Math.min(5, Math.max(2, (n || 12) - 10));
-  for (let i = 0; i < extra; i++) {
-    const s = 0.18 + Math.random() * 0.22;
-    sitLimb(s, s * 0.55, s, color || (Math.random() > 0.35 ? 0xc81810 : 0xe8b070), x, z, (Math.random() - 0.5) * 1.6, (Math.random() - 0.5) * 1.6);
-  }
-  for (let i = 0; i < 10; i++) {
-    addDecal(x + (Math.random() - 0.5) * 1.6, 0, z + (Math.random() - 0.5) * 1.6, null, 1.2 + Math.random());
+  spawnFloorLimbs(x, z, scale || 1.45);
+  sitLimb(0.28 * (scale || 1.45) / 1.45, 0.16, 0.22, 0xe8b878, x, z, 0.8, -0.15);
+  for (let i = 0; i < 8; i++) {
+    addDecal(x + (Math.random() - 0.5) * 2.0, 0, z + (Math.random() - 0.5) * 2.0, null, 1.8 + Math.random() * 1.2);
   }
 }
 
+function spawnGibs(x, y, z) {
+  spawnKillPile(x, z, 1.45);
+}
+
 function spawnOpenerGibs(x, y, z) {
-  SFX.gib();
-  spawnFloorLimbs(x, z, 1.55);
+  spawnKillPile(x, z, 1.55);
   sitLimb(0.2, 0.12, 0.2, 0xff2010, x, z, -0.55, 0.95);
-  sitLimb(0.28, 0.16, 0.22, 0xe8b878, x, z, 0.8, -0.15);
-  for (let i = 0; i < 8; i++) {
-    addDecal(x + (Math.random() - 0.5) * 2.0, 0, z + (Math.random() - 0.5) * 2.0, null, 2.0 + Math.random() * 1.4);
-  }
 }
 
 function addDecal(x, y, z, wall, scale) {
@@ -2306,11 +2387,11 @@ function killEnemy(e, gibby) {
   e.dead = true;
   e.state = "dead";
   SFX.death();
-  if (e.opener) {
-    spawnOpenerGibs(e.x, 1.2, e.z);
-    if (gunFlash) gunFlash.visible = false;
-    if (muzzle) { muzzle.intensity = 0; muzzle.visible = false; }
-  } else spawnGibs(e.x, 1.2, e.z, gibby ? 42 : 24);
+  if (gunFlash) gunFlash.visible = false;
+  if (muzzle) { muzzle.intensity = 0; muzzle.visible = false; }
+  if (e.opener) spawnOpenerGibs(e.x, 1.2, e.z);
+  else spawnGibs(e.x, 1.2, e.z);
+  killBark(!!e.opener);
   addDecal(e.x, e.y + 0.02, e.z, null, e.opener ? 3.2 : 1);
   const wall = nearestWallHit(e.x, 1.1, e.z);
   if (wall) addDecal(e.x, 1.1, e.z, wall, e.opener ? 2.4 : 1);
@@ -3182,13 +3263,7 @@ function buildLevel() {
           const spawned = enemies[enemies.length - 1];
           if (r <= 7 && !enemies.some((en) => en.opener)) markOpener(spawned);
           if (r >= 9 && r <= 11) spawned.hall = true;
-          if (r >= 13 && r <= 18) {
-            spawned.room = true;
-            spawned.body.material = new THREE.MeshLambertMaterial({ color: 0x2a4a3a, emissive: 0x0a1810, flatShading: true });
-            const sash = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.2, 0.36), new THREE.MeshBasicMaterial({ color: 0x20c050 }));
-            sash.position.y = 1.08;
-            spawned.group.add(sash);
-          }
+          if (r >= 13 && r <= 18) spawned.room = true;
         }
       }
       if (ch === "2") spawnEnemy(x, 0, z, true);
