@@ -2531,7 +2531,7 @@ function markHitDir(fromX, fromZ) {
 function hurtPlayer(n, fromX, fromZ) {
   if (!player || optionsOpen) return;
   if (invulnT > 0) return;
-  if (inCourtyard(player.x, player.z) && timeAlive < 3.2) return;
+  if (inCourtyard(player.x, player.z) && timeAlive < 12) return;
   const soak = Math.min(player.armor, n * 0.6);
   player.armor -= soak;
   player.hp = Math.max(0, player.hp - (n - soak));
@@ -2550,7 +2550,7 @@ function playerRow() {
 
 function die() {
   if (!started || !player) return;
-  if (inCourtyard(player.x, player.z) && timeAlive < 8) return;
+  if (inCourtyard(player.x, player.z) && timeAlive < 20) return;
   pointerLocked = false;
   optionsOpen = false;
   slideDrag = false;
@@ -2609,6 +2609,8 @@ function use() {
       if (d.kind === "gold" && player && player.z < d.z + 0.9) {
         goldDoorOpen = true;
         lookFreeze = 0;
+        padAir = 0;
+        player.pitch = 0.08;
         invulnT = 1.8;
         player.x = d.x;
         player.z = d.z + 2.15;
@@ -2620,6 +2622,7 @@ function use() {
         player.yaw = Math.PI;
         player.pitch = 0.08;
         applyLook();
+        if (window.console) console.log("[ROTT] GOLD DOOR", player.x.toFixed(2), player.z.toFixed(2));
         for (const e of enemies) {
           if (e.dead || e.opener || inCourtyard(e.x, e.z)) continue;
           if (Math.hypot(e.x - player.x, e.z - player.z) < 14) {
@@ -2910,13 +2913,18 @@ function feetOnPad(p) {
   p.z = w.z;
   const hitR = padHitR(p);
   if (player.y > w.y + 3.4 || player.y < w.y - 0.85) return false;
-  if (p.yard && player.z > w.z + 1.55) return false;
+  if (p.yard) {
+    const s = findCell("S");
+    const sx = worldX(s.c), sz = worldZ(s.r);
+    if (player.z > sz + 0.85) return false;
+    if (Math.abs(player.x - sx) < 2.1 && player.z >= sz - 0.25) return false;
+  }
   return Math.hypot(player.x - w.x, player.z - w.z) < hitR;
 }
 
 function rideLaunchLook() {
   if (!player) return;
-  if (padAir > 0 || player.y > 0.35) {
+  if (padAir > 0) {
     player.pitch = -1.12;
   } else if (player.pitch < 0.08) {
     player.pitch += (0.1 - player.pitch) * 0.2;
@@ -3021,7 +3029,7 @@ function seatOpening() {
   clearLaunchLane(player.x, player.z, player.x + 16, player.z);
   clearLaunchLane(player.x, player.z, player.x - 16, player.z);
   aimEastYard();
-  const padDist = 4.6;
+  const padDist = 7.2;
   const guardDist = 9.8;
   if (walkHitsWall(player.x, player.z, openFwdX, openFwdZ, 16)) {
     aimEastYard();
@@ -4058,10 +4066,14 @@ function tick(dt) {
       p.z = p.mesh.position.z;
     }
     p.mesh.position.y = (p.y || 0.6) + Math.sin(titleT * 4 + p.x) * 0.08;
-    const grab = p.kind === "gold" || p.kind === "silver" ? 2.5 : 1.1;
+    const grab = p.kind === "gold" ? 3.4 : (p.kind === "silver" ? 2.5 : 1.1);
     const near = Math.hypot(player.x - p.x, player.z - p.z) < grab;
     const low = player.y < 3.6;
     if (near && low) takePickup(p);
+  }
+  if ((haveGold || keys.gold) && !goldDoorOpen && player && player.y < 1.2) {
+    const gd = doors.find((d) => d.kind === "gold" && !d.open);
+    if (gd && Math.hypot(player.x - gd.x, player.z - gd.z) < 2.4) use();
   }
 
   for (const d of doors) {
