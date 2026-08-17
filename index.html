@@ -2082,10 +2082,24 @@ function nearestWallHit(x, y, z) {
   return best;
 }
 
+function onLiftPad(el, x, z) {
+  const h = TILE * 0.95 * 0.5;
+  return Math.abs(x - el.x) <= h && Math.abs(z - el.z) <= h;
+}
+
+function liftTop(el) {
+  return el.solid ? el.solid.maxy : 0;
+}
+
 function overlaps(nx, ny, nz) {
   const r = PLAYER_R;
   for (const s of solids) {
     if (s._open) continue;
+    if (s.elevator) {
+      if (nx + r <= s.minx || nx - r >= s.maxx || nz + r <= s.minz || nz - r >= s.maxz) continue;
+      if (ny < s.maxy - 0.02 && ny >= s.maxy - 0.35 && ny + PLAYER_H > s.miny) return s;
+      continue;
+    }
     if (s.maxy - s.miny < 0.38 && ny + 0.22 > s.maxy) continue;
     if (nx + r > s.minx && nx - r < s.maxx &&
         ny + 0.15 < s.maxy && ny + PLAYER_H > s.miny &&
@@ -2114,7 +2128,19 @@ function tryMove(dx, dy, dz) {
   const ch = cell(col, row);
   if (ch === ",") floor = -2.2;
   if (ch === "c" && y >= CAT_H - 0.7) floor = CAT_H;
-  if (y < floor && padAir <= 0) { y = floor; player.onGround = true; player.vy = 0; }
+  if (player.vy <= 0 && padAir <= 0) {
+    if (player.rideLift && onLiftPad(player.rideLift, x, z)) {
+      floor = Math.max(floor, liftTop(player.rideLift));
+    } else {
+      for (let i = 0; i < elevators.length; i++) {
+        const el = elevators[i];
+        if (!onLiftPad(el, x, z)) continue;
+        const top = liftTop(el);
+        if (y >= top - 0.32 && y <= top + 0.16) floor = Math.max(floor, top);
+      }
+    }
+  }
+  if (y < floor && padAir <= 0 && player.vy <= 0) { y = floor; player.onGround = true; player.vy = 0; }
   player.x = x; player.y = y; player.z = z;
 }
 
@@ -3392,7 +3418,9 @@ function buildLevel() {
       }
       if (ch === "Y") {
         const plat = boxAt(x, 0, z, TILE * 0.95, 0.22, TILE * 0.95, mMetal, true);
-        elevators.push({ x, z, mesh: plat, solid: solids[solids.length - 1], phase: 0 });
+        const es = solids[solids.length - 1];
+        if (es) es.elevator = true;
+        elevators.push({ x, z, mesh: plat, solid: es, phase: 0, top: 0.3 });
       }
       if (ch === "X") {
         const gate = new THREE.MeshBasicMaterial({ color: 0x30f060 });
@@ -3847,7 +3875,30 @@ function tick(dt) {
     airT = 0;
   }
 
-  if (actionHeld("jump") && player.onGround) { player.vy = JUMP; player.onGround = false; SFX.jump(); }
+  if (actionHeld("jump") && player.onGround) {
+    player.vy = JUMP;
+    player.onGround = false;
+    player.rideLift = null;
+    SFX.jump();
+  }
+  for (const el of elevators) {
+    el.phase += dt * 0.35;
+    const y0 = 0.1 + (Math.sin(el.phase) * 0.5 + 0.5) * 5.5;
+    const top = y0 + 0.3;
+    el.mesh.position.y = y0 + 0.11;
+    if (el.solid) {
+      el.solid.miny = y0;
+      el.solid.maxy = top;
+      el.solid.elevator = true;
+    }
+    el.top = top;
+  }
+  if (player.rideLift && player.vy <= 0 && padAir <= 0 && onLiftPad(player.rideLift, player.x, player.z)) {
+    player.y = liftTop(player.rideLift);
+    player.onGround = true;
+  } else if (player.rideLift && (player.vy > 0.2 || !onLiftPad(player.rideLift, player.x, player.z))) {
+    player.rideLift = null;
+  }
   player.vy -= GRAV * dt;
   wasOnGround = player.onGround;
   player.onGround = false;
@@ -3918,17 +3969,20 @@ function tick(dt) {
       p.mesh.position.z = p.z + p.t * TILE * 2.2 * (p.dz || 1);
     }
   }
-  for (const el of elevators) {
-    el.phase += dt * 0.35;
-    const y = 0.1 + (Math.sin(el.phase) * 0.5 + 0.5) * 5.5;
-    el.mesh.position.y = y + 0.11;
-    if (el.solid) { el.solid.miny = y; el.solid.maxy = y + 0.3; }
-    if (Math.hypot(player.x - el.x, player.z - el.z) < 1.4 && player.y < y + 1.5 && player.y > y - 0.4) {
-      player.y = y + 0.25;
+  if (player.vy <= 0 && padAir <= 0) {
+    for (let i = 0; i < elevators.length; i++) {
+      const el = elevators[i];
+      if (!onLiftPad(el, player.x, player.z)) continue;
+      const top = liftTop(el);
+      if (player.y < top - 0.32 || player.y > top + 0.16) continue;
+      player.y = top;
       player.vy = 0;
       player.onGround = true;
+      player.rideLift = el;
+      break;
     }
   }
+  if (player.rideLift && !onLiftPad(player.rideLift, player.x, player.z)) player.rideLift = null;
 
   if (timedDoor && timeAlive >= 180 && timeAlive <= 300 && !timedDoor.open) {
     timedDoor.open = true;
