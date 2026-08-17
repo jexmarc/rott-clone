@@ -155,6 +155,7 @@ let footIn = null;
 const keys = { gold: false, silver: false };
 let haveGold = false;
 let goldDoorOpen = false;
+let hallEntered = false;
 let player;
 let gunRoot, muzzle, gunFlash, gunLight;
 let pointerLocked = false;
@@ -2606,22 +2607,11 @@ function use() {
       d.mesh.position.y = Math.max(d.mesh.position.y, WALL_H * 0.85);
       SFX.door();
       showMsg(d.kind === "free" ? "DOOR" : d.kind.toUpperCase() + " DOOR");
-      if (d.kind === "gold" && player && player.z < d.z + 0.9) {
+      if (d.kind === "gold") {
         goldDoorOpen = true;
         lookFreeze = 0;
         padAir = 0;
-        player.pitch = 0.08;
         invulnT = 1.8;
-        player.x = d.x;
-        player.z = d.z + 2.15;
-        player.y = 0;
-        player.vy = 0;
-        lastSafe.x = player.x;
-        lastSafe.y = 0;
-        lastSafe.z = player.z;
-        player.yaw = Math.PI;
-        player.pitch = 0.08;
-        applyLook();
         if (window.console) console.log("[ROTT] GOLD DOOR", player.x.toFixed(2), player.z.toFixed(2));
         for (const e of enemies) {
           if (e.dead || e.opener || inCourtyard(e.x, e.z)) continue;
@@ -2763,6 +2753,7 @@ function resetPlayer() {
   keys.silver = false;
   haveGold = false;
   goldDoorOpen = false;
+  hallEntered = false;
   wepI = 0;
   mag = [24, 32, 6, 5, 4];
   reserve = [96, 64, 8, 6, 5];
@@ -3916,6 +3907,10 @@ function tick(dt) {
   }
   timeAlive += dt;
   if (goldDoorOpen || playerRow() > 7) lookFreeze = 0;
+  if (goldDoorOpen && !hallEntered && playerRow() >= 9) {
+    hallEntered = true;
+    if (window.console) console.log("[ROTT] HALL", player.x.toFixed(2), player.z.toFixed(2));
+  }
   if (scene && scene.fog) {
     const pr = playerRow();
     if (pr >= 8 && pr <= 12) {
