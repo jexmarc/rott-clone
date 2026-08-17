@@ -1274,7 +1274,7 @@ function paintHUD(g) {
   const k = [];
   if (gotGold) k.push("GOLD KEY");
   if (keys.silver) k.push("SILVER KEY");
-  drawText(g, k.join(" ") || "NO KEY", 210, 174, gotGold || keys.silver ? "#f0c040" : "#604838", 1);
+  drawText(g, k.join(" ") || "NO KEY", 316, 174, gotGold || keys.silver ? "#f0c040" : "#604838", 1, "right");
   const m = timeAlive / 60 | 0;
   const s = (timeAlive | 0) % 60;
   drawText(g, m + ":" + (s < 10 ? "0" : "") + s, 210, 184, "#a08050", 1);
