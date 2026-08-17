@@ -58,7 +58,7 @@ const MAP = [
   "############P##############.......############",
   "###########ccccc##############P###############",
   "###########cSccc#########..........###########",
-  "###########c^ccc#########..........###########",
+  "###########ccccc#########..........###########",
   "####~~~~~~~~~~~~~~~~~~~~#..B..B..B.#ccccccc###",
   "####~~t~~~~~~~~~~~~~~t~~#.......H..#c1ccccc###",
   "####~~~~~~~~~~~1~~~~~~~~#..B..B..B.#ccccHcc###",
@@ -2961,8 +2961,6 @@ function bounceOff(p) {
   player.vy = PAD_UP;
   player.onGround = false;
   player.y = Math.max(player.y, p.y || 0) + 2.15;
-  player.x = p.x;
-  player.z = p.z;
   ridePad = p;
   padAir = 1.8;
   padBoost = 0;
@@ -3808,23 +3806,15 @@ function tick(dt) {
   if (actionHeld("left") || held.ArrowLeft) ix -= 1;
   if (actionHeld("right") || held.ArrowRight) ix += 1;
   const running = actionHeld("run");
-  const air = padAir > 0 || player.y > 1.1;
-  const sp = (running ? RUN : MOVE) * (air ? 0.22 : 1);
+  const air = padAir > 0 || !player.onGround || player.y > 1.1;
+  const sp = (running ? RUN : MOVE) * (air ? 0.85 : 1);
   const len = Math.hypot(ix, iz) || 1;
   applyLook();
   const fwd = camForward();
   const rx = -fwd.z, rz = fwd.x;
   let wishX = ((-iz) * fwd.x + ix * rx) / len;
   let wishZ = ((-iz) * fwd.z + ix * rz) / len;
-  if (padAir > 0) {
-    padBoost = 0;
-    wishX = 0;
-    wishZ = 0;
-    if (ridePad) {
-      player.x = ridePad.x;
-      player.z = ridePad.z;
-    }
-  } else if (padBoost > 0) {
+  if (padBoost > 0) {
     padBoost -= dt;
     wishX += openFwdX * 0.42;
     wishZ += openFwdZ * 0.42;
