@@ -1616,11 +1616,12 @@ function makeGoldKey(x, y, z) {
   const glow = new THREE.PointLight(0xffc040, 2.4, 22, 1.15);
   glow.position.y = 1.2;
   group.add(glow);
-  const tag = makeLabel("GOLD");
-  tag.position.set(0, 2.35, 0);
+  const tag = makeLabel("GOLD KEY");
+  tag.position.set(0, 2.55, 0);
   tag.rotation.y = Math.PI;
-  tag.scale.set(1.35, 1.35, 1);
+  tag.scale.set(2.1, 2.1, 1);
   group.add(tag);
+  group.scale.set(1.85, 1.85, 1.85);
   group.position.set(x, y, z);
   scene.add(group);
   pickups.push({ x, y, z, kind: "gold", mesh: group, label: "GOLD KEY", taken: false, yard: true });
@@ -2770,7 +2771,7 @@ function resetPlayer() {
   timeAlive = 0;
   padBoost = 0;
   padAir = 0;
-  lookFreeze = 0.8;
+  lookFreeze = 0.2;
   invulnT = 3.2;
   hitCueT = 0;
   hitMarkT = 0;
@@ -2830,6 +2831,28 @@ function faceTheYard() {
   player.yaw = bestYaw;
   player.pitch = 0.16;
   applyLook();
+}
+
+function southFwd() {
+  if (!player || !camera) return { x: 0, z: 1, yaw: Math.PI };
+  const saveYaw = player.yaw;
+  const savePitch = player.pitch;
+  let bestYaw = Math.PI, best = -1e9, bestF = { x: 0, z: 1 };
+  for (let i = 0; i < 64; i++) {
+    player.yaw = (i / 64) * Math.PI * 2;
+    player.pitch = 0.1;
+    applyLook();
+    const f = camForward();
+    if (f.z > best) {
+      best = f.z;
+      bestYaw = player.yaw;
+      bestF = { x: f.x, z: f.z };
+    }
+  }
+  player.yaw = saveYaw;
+  player.pitch = savePitch;
+  applyLook();
+  return { x: bestF.x, z: bestF.z, yaw: bestYaw };
 }
 
 function aimEastYard() {
@@ -2893,9 +2916,8 @@ function feetOnPad(p) {
 
 function rideLaunchLook() {
   if (!player) return;
-  if (padAir > 0 || player.y > 0.4) {
-    const t = Math.min(1, Math.max(0, (player.y - 0.2) / 1.6));
-    player.pitch = openPitch + (-1.08 - openPitch) * t;
+  if (padAir > 0 || player.y > 0.35) {
+    player.pitch = -1.12;
   } else if (player.pitch < 0.08) {
     player.pitch += (0.1 - player.pitch) * 0.2;
   }
@@ -2904,9 +2926,12 @@ function rideLaunchLook() {
 function bounceOff(p) {
   player.vy = PAD_UP;
   player.onGround = false;
-  player.y += 0.5;
-  padAir = 1.4;
-  padBoost = 0.28;
+  player.y = Math.max(player.y, 0) + 2.15;
+  player.x = p.x;
+  player.z = p.z;
+  padAir = 1.8;
+  padBoost = 0;
+  player.pitch = -1.12;
   p.cool = 0.7;
   p.flash = 1;
   SFX.pad();
@@ -3037,26 +3062,30 @@ function seatOpening() {
   }
   const meal = pickups.find((p) => p.kind === "health" && p.yard);
   if (meal) {
-    meal.x = player.x + openFwdX * 7.4 + -openFwdZ * 2.4;
-    meal.z = player.z + openFwdZ * 7.4 + openFwdX * 2.4;
+    meal.x = player.x - 3.2;
+    meal.z = player.z - 2.4;
     meal.mesh.position.set(meal.x, meal.y, meal.z);
   }
-  const gCell = findCell("G");
-  const keyX = worldX(gCell.c);
-  const keyZ = worldZ(gCell.r);
+  const south = southFwd();
+  const keyDist = 5.2;
+  const keyX = player.x + south.x * keyDist;
+  const keyZ = player.z + south.z * keyDist;
   let key = pickups.find((p) => p.kind === "gold");
   if (!key) {
-    makeGoldKey(keyX, 0.85, keyZ);
+    makeGoldKey(keyX, 0.9, keyZ);
     key = pickups.find((p) => p.kind === "gold");
   }
   if (key) {
     key.x = keyX;
     key.z = keyZ;
-    key.y = 0.85;
+    key.y = 0.9;
     key.taken = false;
     key.mesh.visible = true;
-    key.mesh.position.set(keyX, 0.85, keyZ);
+    key.mesh.position.set(keyX, 0.9, keyZ);
     key.mesh.updateMatrixWorld(true);
+    if (window.console) {
+      console.log("[ROTT] SOUTH KEY", keyX.toFixed(2), keyZ.toFixed(2), "ray", south.x.toFixed(2), south.z.toFixed(2));
+    }
   }
   if (pad) signpostPad(pad.x, pad.z);
   const proof = proveOpening();
@@ -3769,7 +3798,7 @@ function bind() {
     if (pointerLocked) {
       wantLock = false;
       clearLockHint();
-      if (started && !goldDoorOpen && playerRow() <= 7) lookFreeze = Math.max(lookFreeze, 0.35);
+      if (started && !goldDoorOpen && playerRow() <= 7 && timeAlive < 0.25) lookFreeze = Math.max(lookFreeze, 0.15);
     }
     if (!pointerLocked && ignoreUnlock) ignoreUnlock = false;
   };
@@ -3908,10 +3937,12 @@ function tick(dt) {
       scene.background.setHex(0x0a0818);
     }
   }
-  if (lookFreeze > 0) {
+  if (lookFreeze > 0 && padAir <= 0 && player.y < 0.4) {
     lookFreeze -= dt;
     player.yaw = openYaw;
-    if (player.y < 1.15 && padAir <= 0) player.pitch = openPitch;
+    player.pitch = openPitch;
+  } else if (lookFreeze > 0) {
+    lookFreeze -= dt;
   }
   rideLaunchLook();
   if (padAir > 0) padAir -= dt;
@@ -4122,12 +4153,13 @@ function tick(dt) {
     if (muzzle.intensity < 0.2) { muzzle.intensity = 0; muzzle.visible = false; }
   }
   const airAmt = Math.min(1, Math.max(0, (player.y - 0.8) / 9));
+  if (padAir > 0) player.pitch = -1.12;
   camera.fov = FOV + airAmt * 14;
   camera.updateProjectionMatrix();
   camera.position.set(player.x, player.y + PLAYER_H + Math.sin(bob) * 0.22 * (1 - airAmt) - landDip * 0.28, player.z);
   camera.rotation.order = "YXZ";
   camera.rotation.y = -player.yaw + viewPunch * (pistolHand ? -0.09 : 0.09);
-  camera.rotation.x = player.pitch + gunKick + viewPunch * 0.35 + Math.sin(bob * 2) * (moving && !airAmt ? 0.035 : 0);
+  camera.rotation.x = (padAir > 0 ? -1.12 : player.pitch) + gunKick + viewPunch * 0.35 + Math.sin(bob * 2) * (moving && !airAmt ? 0.035 : 0);
   camera.rotation.z = (moving ? -ix * 0.07 : camera.rotation.z * 0.8) + viewPunch * 0.14;
   if (gunRoot) {
     gunRoot.position.y = -0.12 + Math.sin(bob) * 0.02 - gunRecoil * 0.04;
