@@ -3652,7 +3652,7 @@ function bind() {
     if (!started || !player || optionsOpen) return;
     if (!pointerLocked && !isLocked()) return;
     player.yaw += e.movementX * 0.00215 * lookSens;
-    player.pitch -= e.movementY * 0.00215 * lookSens;
+    player.pitch += e.movementY * 0.00215 * lookSens;
     player.pitch = Math.max(-1.2, Math.min(1.2, player.pitch));
   }, true);
   ui.addEventListener("pointerdown", (e) => {
